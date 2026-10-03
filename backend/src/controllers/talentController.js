@@ -77,7 +77,7 @@ export async function listTalents(req, res) {
 
 // POST /api/talents (auth required — author is taken from the JWT)
 export async function createTalent(req, res) {
-  const { title, type, category, description, poemText, tags, createdLabel } = req.body || {};
+  const { title, type, category, description, poemText, tags, createdLabel, thumbnail } = req.body || {};
 
   if (!title || !String(title).trim()) {
     return res.status(400).json({ error: 'Title is required' });
@@ -105,6 +105,14 @@ export async function createTalent(req, res) {
     const id = `talent-${Date.now()}`;
     const safeType = String(type);
 
+    // Prefer a real thumbnail captured from the uploader's own video file.
+    // Anything else (missing, wrong type, absurdly large) falls back to the
+    // stock placeholder so publishing never breaks.
+    const clientThumbnail =
+      typeof thumbnail === 'string' && thumbnail.trim().length > 0 && thumbnail.length <= 8000000
+        ? thumbnail.trim()
+        : null;
+
     await pool.query(
       `INSERT INTO talents
          (id, title, type, category, author_name, author_handle, author_avatar,
@@ -125,7 +133,7 @@ export async function createTalent(req, res) {
         1,
         createdLabel || 'Just now',
         String(description).trim(),
-        PLACEHOLDER_THUMBNAILS[safeType],
+        clientThumbnail || PLACEHOLDER_THUMBNAILS[safeType],
         safeType === 'video' ? SAMPLE_VIDEO_URL : null,
         Array.isArray(poemText) ? JSON.stringify(poemText) : null,
         Array.isArray(tags) ? JSON.stringify(tags) : null,

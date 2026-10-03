@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS talents (
   comments_count INT          NOT NULL DEFAULT 0,
   votes          INT          NOT NULL DEFAULT 0,
   description    TEXT         NULL,
-  thumbnail      TEXT         NULL,
+  thumbnail      MEDIUMTEXT   NULL,
   content_url    TEXT         NULL,
   poem_text      JSON         NULL,
   audio_duration VARCHAR(20)  NULL,

@@ -79,6 +79,8 @@ export interface CreateTalentPayload {
   poemText?: string[];
   tags?: string[];
   createdLabel?: string;
+  /** JPEG data URL of a frame captured from the uploaded video file. */
+  thumbnail?: string;
 }
 
 export const api = {

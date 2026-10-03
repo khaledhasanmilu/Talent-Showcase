@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { TalentType, Category, TalentItem, UserProfile } from '../types';
 import { fireSuccessConfetti } from '../utils/confetti';
+import { captureVideoThumbnail } from '../utils/videoThumbnail';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../api/client';
 
@@ -36,6 +37,8 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
   const [description, setDescription] = useState('');
   const [poemContent, setPoemContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [capturedThumb, setCapturedThumb] = useState<string | null>(null);
+  const [isCapturingThumb, setIsCapturingThumb] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -53,7 +56,19 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      // Grab a real frame from the video so the post thumbnail is the
+      // user's own content, not a stock placeholder. Never blocks upload.
+      if (selectedType === 'video') {
+        setCapturedThumb(null);
+        setIsCapturingThumb(true);
+        captureVideoThumbnail(file)
+          .then((thumb) => setCapturedThumb(thumb))
+          .finally(() => setIsCapturingThumb(false));
+      } else {
+        setCapturedThumb(null);
+      }
     }
   };
 
@@ -89,12 +104,20 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
         description: description.trim(),
         poemText: poemLines,
         tags: [category, 'CommunityShowcase'],
-        createdLabel: language === 'bn' ? 'এইমাত্র' : 'Just now'
+        createdLabel: language === 'bn' ? 'এইমাত্র' : 'Just now',
+        thumbnail:
+          selectedType === 'video' && capturedThumb ? capturedThumb : undefined,
       });
 
       onUploadSuccess(
         {
           ...talent,
+          // Prefer the frame grabbed from the user's own file so the feed
+          // shows it immediately even before a refetch.
+          thumbnail:
+            selectedType === 'video' && capturedThumb
+              ? capturedThumb
+              : talent.thumbnail,
           contentUrl: localPreviewUrl || talent.contentUrl,
           audioDuration: selectedType === 'audio' ? '3:30' : talent.audioDuration,
           audioWaveform:
@@ -124,11 +147,14 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
         commentsCount: 0,
         votes: 1,
         description: description.trim(),
-        thumbnail: selectedType === 'text'
-          ? 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=800&auto=format&fit=crop&q=80'
-          : selectedType === 'audio'
-          ? 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80'
-          : 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80',
+        thumbnail:
+          selectedType === 'video' && capturedThumb
+            ? capturedThumb
+            : selectedType === 'text'
+            ? 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=800&auto=format&fit=crop&q=80'
+            : selectedType === 'audio'
+            ? 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80'
+            : 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80',
         contentUrl:
           localPreviewUrl ||
           (selectedType === 'video'
@@ -153,6 +179,7 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
     setDescription('');
     setPoemContent('');
     setSelectedFile(null);
+    setCapturedThumb(null);
     setSelectedType('video');
     setCategory('Singing');
     onClose();
@@ -338,6 +365,32 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
                   {t.mediaFormatHint}
                 </span>
               </label>
+              {/* Auto-captured video frame preview */}
+              {selectedType === 'video' && (isCapturingThumb || capturedThumb) && (
+                <div className="mt-2.5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-2.5">
+                  {isCapturingThumb ? (
+                    <>
+                      <div className="w-16 h-10 shrink-0 rounded-lg bg-slate-100 animate-pulse" />
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        {language === 'bn' ? 'ভিডিও থেকে থাম্বনেইল তৈরি হচ্ছে…' : 'Grabbing a thumbnail from your video…'}
+                      </span>
+                    </>
+                  ) : (
+                    capturedThumb && (
+                      <>
+                        <img
+                          src={capturedThumb}
+                          alt="Video thumbnail preview"
+                          className="w-16 h-10 shrink-0 rounded-lg object-cover ring-1 ring-slate-200"
+                        />
+                        <span className="text-[11px] font-semibold text-slate-500">
+                          {language === 'bn' ? 'আপনার ভিডিও থেকে থাম্বনেইল' : 'Thumbnail captured from your video'}
+                        </span>
+                      </>
+                    )
+                  )}
+                </div>
+              )}
             </div>
           )}
 
