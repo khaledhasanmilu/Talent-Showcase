@@ -10,7 +10,7 @@ function parseJson(value, fallback) {
   }
 }
 
-export function mapTalent(row) {
+export function mapTalent(row, interaction = {}) {
   return {
     id: row.id,
     title: row.title,
@@ -34,9 +34,9 @@ export function mapTalent(row) {
     audioDuration: row.audio_duration ?? undefined,
     tags: parseJson(row.tags, undefined),
     audioWaveform: parseJson(row.audio_waveform, undefined),
-    isLiked: false,
-    isVoted: false,
-    isSaved: false,
+    isLiked: Boolean(interaction.liked),
+    isVoted: Boolean(interaction.voted),
+    isSaved: Boolean(interaction.saved),
   };
 }
 
@@ -60,4 +60,33 @@ export function mapUserPublic(row) {
 export function buildHandle(name) {
   const base = String(name || 'user').toLowerCase().replace(/[^a-z0-9]+/g, '');
   return `@${base || 'user'}`;
+}
+
+export function relativeTime(dateStr) {
+  if (!dateStr) return 'Just now';
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return 'Just now';
+  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return date.toISOString().slice(0, 10);
+}
+
+export function mapComment(row, isLiked = false) {
+  return {
+    id: row.id,
+    talentId: row.talent_id,
+    authorName: row.author_name,
+    authorAvatar: row.author_avatar,
+    text: row.text,
+    likes: row.likes,
+    isLiked: Boolean(isLiked),
+    replies: [],
+    createdAt: relativeTime(row.created_at),
+  };
 }

@@ -9,7 +9,7 @@
 
 import bcrypt from 'bcryptjs';
 import { pool } from './src/config/db.js';
-import { SEED_PASSWORD, seedTalents, seedUsers } from './seedData.js';
+import { SEED_PASSWORD, seedConversations, seedNotifications, seedTalents, seedUsers } from './seedData.js';
 
 function toJson(value) {
   if (value === null || value === undefined) return null;
@@ -78,6 +78,71 @@ try {
     );
   }
   console.log(`[seed] Upserted ${seedTalents.length} talents`);
+
+  // Build a lookup of seeded users so conversation contacts match stored data.
+  const userById = new Map(seedUsers.map((u) => [u.id, u]));
+  for (const conv of seedConversations) {
+    const contact = userById.get(conv.contactId) || {};
+    const lastMsg = conv.messages.length
+      ? conv.messages[conv.messages.length - 1].text
+      : '';
+    await pool.query(
+      `INSERT INTO conversations
+         (id, user_id, contact_id, contact_name, contact_avatar, contact_handle,
+          contact_online, contact_location, last_message, unread_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1)
+       ON DUPLICATE KEY UPDATE
+         contact_name = VALUES(contact_name),
+         contact_avatar = VALUES(contact_avatar),
+         contact_handle = VALUES(contact_handle),
+         contact_location = VALUES(contact_location),
+         last_message = VALUES(last_message)`,
+      [
+        conv.id,
+        conv.userId,
+        conv.contactId,
+        contact.name || 'Contact',
+        contact.avatar || null,
+        contact.handle || null,
+        contact.location || 'Bangladesh',
+        lastMsg,
+      ],
+    );
+
+    for (const m of conv.messages) {
+      await pool.query(
+        `INSERT INTO messages (id, conversation_id, sender, text)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE text = VALUES(text)`,
+        [`${conv.id}-${m.sender}-${m.text.length}-${Math.abs([...m.text].reduce((a, c) => a + c.charCodeAt(0), 0))}`, conv.id, m.sender, m.text],
+      );
+    }
+  }
+  console.log(`[seed] Upserted ${seedConversations.length} conversations`);
+
+  for (const n of seedNotifications) {
+    await pool.query(
+      `INSERT INTO notifications
+         (id, user_id, type, actor_name, actor_avatar, message, talent_title, talent_id, is_read)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+       ON DUPLICATE KEY UPDATE
+         actor_name = VALUES(actor_name), actor_avatar = VALUES(actor_avatar),
+         message = VALUES(message), talent_title = VALUES(talent_title),
+         talent_id = VALUES(talent_id)`,
+      [
+        n.id,
+        n.userId,
+        n.type,
+        n.actorName,
+        n.actorAvatar || null,
+        n.message,
+        n.talentTitle || null,
+        n.talentId || null,
+      ],
+    );
+  }
+  console.log(`[seed] Upserted ${seedNotifications.length} notifications`);
+
   console.log('[seed] Done.');
 } catch (err) {
   console.error('[seed] Failed:', err.message);

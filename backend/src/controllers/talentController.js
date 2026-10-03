@@ -10,6 +10,33 @@ const PLACEHOLDER_THUMBNAILS = {
   text: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=800&auto=format&fit=crop&q=80',
 };
 
+// Fetch the requesting user's like/vote/save state for a set of talent ids.
+async function getInteractions(userId, talentIds) {
+  if (!userId || talentIds.length === 0) return new Map();
+  const idList = `('${talentIds.join("','")}')`;
+  const [rows] = await pool.query(
+    `SELECT talent_id, liked, voted, saved FROM content_interactions
+     WHERE user_id = ? AND talent_id IN ${idList}`,
+    [userId],
+  );
+  return new Map(rows.map((r) => [r.talent_id, { liked: r.liked, voted: r.voted, saved: r.saved }]));
+}
+
+// Apply per-user interaction flags to a list of mapped talents.
+async function decorateWithInteractions(mapped, userId) {
+  if (!userId || mapped.length === 0) return mapped;
+  const interact = await getInteractions(userId, mapped.map((t) => t.id));
+  return mapped.map((t) => {
+    const it = interact.get(t.id) || {};
+    return {
+      ...t,
+      isLiked: Boolean(it.liked),
+      isVoted: Boolean(it.voted),
+      isSaved: Boolean(it.saved),
+    };
+  });
+}
+
 // GET /api/talents?type=&category=&search=&limit=
 export async function listTalents(req, res) {
   const { type, category, search } = req.query || {};
@@ -39,7 +66,9 @@ export async function listTalents(req, res) {
        LIMIT ${limit}`,
       params,
     );
-    return res.json({ talents: rows.map(mapTalent) });
+    const mapped = rows.map((row) => mapTalent(row));
+    const decorated = await decorateWithInteractions(mapped, req.userId);
+    return res.json({ talents: decorated });
   } catch (err) {
     console.error('[talents]', err.message);
     return res.status(500).json({ error: 'Could not load talents' });
@@ -116,4 +145,63 @@ export async function createTalent(req, res) {
     console.error('[create-talent]', err.message);
     return res.status(500).json({ error: 'Could not publish talent. Please try again.' });
   }
+}
+
+/**
+ * Toggle like / vote / save for the authenticated user on a talent.
+ * action must be one of 'like' | 'vote' | 'save'.
+ */
+async function toggleInteraction(req, res, action) {
+  const { id } = req.params;
+  const col = { like: 'liked', vote: 'voted', save: 'saved' }[action];
+  const countCol = { like: 'likes', vote: 'votes', save: null }[action];
+
+  try {
+    const [talents] = await pool.query('SELECT id, likes, votes FROM talents WHERE id = ? LIMIT 1', [id]);
+    if (talents.length === 0) {
+      return res.status(404).json({ error: 'Talent not found' });
+    }
+
+    const current = await getInteractions(req.userId, [id]);
+    const prev = current.get(id)?.[col] ? 1 : 0;
+    const next = prev ? 0 : 1;
+
+    await pool.query(
+      `INSERT INTO content_interactions (user_id, talent_id, ${col})
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE ${col} = VALUES(${col})`,
+      [req.userId, id, next],
+    );
+
+    if (countCol) {
+      const delta = next - prev;
+      await pool.query(
+        `UPDATE talents SET ${countCol} = GREATEST(0, ${countCol} + ?) WHERE id = ?`,
+        [delta, id],
+      );
+    }
+
+    const [rows] = await pool.query('SELECT * FROM talents WHERE id = ? LIMIT 1', [id]);
+    const decorated = await decorateWithInteractions([mapTalent(rows[0])], req.userId);
+    return res.json({
+      talent: decorated[0],
+      action,
+      active: next === 1,
+    });
+  } catch (err) {
+    console.error(`[toggle-${action}]`, err.message);
+    return res.status(500).json({ error: `Could not ${action} this talent` });
+  }
+}
+
+export function toggleLike(req, res) {
+  return toggleInteraction(req, res, 'like');
+}
+
+export function toggleVote(req, res) {
+  return toggleInteraction(req, res, 'vote');
+}
+
+export function toggleSave(req, res) {
+  return toggleInteraction(req, res, 'save');
 }

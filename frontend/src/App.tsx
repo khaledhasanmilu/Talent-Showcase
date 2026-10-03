@@ -4,7 +4,6 @@ import {
   mockLeaderboard, 
   mockComments, 
   mockNotifications, 
-  mockChatThreads, 
   currentUserProfile 
 } from './data/mockData';
 import { 
@@ -51,7 +50,7 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>(mockLeaderboard);
   const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>(mockComments);
   const [notifications, setNotifications] = useState<NotificationItem[]>(mockNotifications);
-  const [chatThreads, setChatThreads] = useState<ChatThread[]>(mockChatThreads);
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile>(currentUserProfile);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -105,6 +104,21 @@ export default function App() {
       } catch {
         // Backend offline — keep mock data so the UI still renders.
       }
+
+      if (getToken()) {
+        try {
+          const [conversations, notifications] = await Promise.all([
+            api.getConversations(),
+            api.getNotifications(),
+          ]);
+          if (!cancelled) {
+            setChatThreads(conversations);
+            setNotifications(notifications);
+          }
+        } catch {
+          // keep mock inbox/notifications as fallback.
+        }
+      }
     })();
 
     return () => {
@@ -113,93 +127,52 @@ export default function App() {
   }, []);
 
   // Handlers for Talent Interaction
-  const handleToggleLike = (talentId: string) => {
-    setTalents((prev) =>
-      prev.map((item) => {
-        if (item.id === talentId) {
-          const nextLiked = !item.isLiked;
-          return {
-            ...item,
-            isLiked: nextLiked,
-            likes: nextLiked ? item.likes + 1 : Math.max(0, item.likes - 1)
-          };
-        }
-        return item;
-      })
+  const applyTalentPatch = (talentId: string, patch: (t: TalentItem) => TalentItem) => {
+    setTalents((prev) => prev.map((item) => (item.id === talentId ? patch(item) : item)));
+    setSelectedTalent((prev) =>
+      prev && prev.id === talentId ? { ...prev, ...patch(prev) } : prev
     );
+  };
 
-    if (selectedTalent && selectedTalent.id === talentId) {
-      setSelectedTalent((prev) =>
-        prev
-          ? {
-              ...prev,
-              isLiked: !prev.isLiked,
-              likes: !prev.isLiked ? prev.likes + 1 : Math.max(0, prev.likes - 1)
-            }
-          : null
-      );
-    }
+  const handleToggleLike = (talentId: string) => {
+    if (!getToken()) return;
+    applyTalentPatch(talentId, (t) => {
+      const next = !t.isLiked;
+      return { ...t, isLiked: next, likes: next ? t.likes + 1 : Math.max(0, t.likes - 1) };
+    });
+    api.toggleTalentInteraction(talentId, 'like')
+      .then(({ talent }) => applyTalentPatch(talentId, (t) => ({ ...t, ...talent })))
+      .catch(() => addToast('error', 'Could not update like'));
   };
 
   const handleToggleVote = (talentId: string) => {
-    setTalents((prev) =>
-      prev.map((item) => {
-        if (item.id === talentId) {
-          const nextVoted = !item.isVoted;
-          const nextVotes = nextVoted ? item.votes + 1 : Math.max(0, item.votes - 1);
-          return {
-            ...item,
-            isVoted: nextVoted,
-            votes: nextVotes
-          };
-        }
-        return item;
-      })
-    );
-
-    if (selectedTalent && selectedTalent.id === talentId) {
-      setSelectedTalent((prev) =>
-        prev
-          ? {
-              ...prev,
-              isVoted: !prev.isVoted,
-              votes: !prev.isVoted ? prev.votes + 1 : Math.max(0, prev.votes - 1)
-            }
-          : null
-      );
+    if (!getToken()) return;
+    const wasVoted = talents.find((t) => t.id === talentId)?.isVoted;
+    applyTalentPatch(talentId, (t) => {
+      const next = !t.isVoted;
+      return { ...t, isVoted: next, votes: next ? t.votes + 1 : Math.max(0, t.votes - 1) };
+    });
+    if (!wasVoted) {
+      setCurrentUser((prev) => ({ ...prev, score: prev.score + 5 }));
+      addToast('success', 'Vote Recorded!', 'You boosted this talent in the weekly ranking (+5 points).');
     }
-
-    // Update user score
-    setCurrentUser((prev) => ({
-      ...prev,
-      score: prev.score + 5
-    }));
-
-    addToast('success', 'Vote Recorded!', 'You boosted this talent in the weekly ranking (+5 points).');
+    api.toggleTalentInteraction(talentId, 'vote')
+      .then(({ talent }) => applyTalentPatch(talentId, (t) => ({ ...t, ...talent })))
+      .catch(() => addToast('error', 'Could not update vote'));
   };
 
   const handleToggleSave = (talentId: string) => {
-    setTalents((prev) =>
-      prev.map((item) => {
-        if (item.id === talentId) {
-          const nextSaved = !item.isSaved;
-          addToast(
-            'info',
-            nextSaved ? 'Saved to Collection' : 'Removed from Saved',
-            nextSaved ? 'You can view this talent in your Profile → Saved tab.' : undefined
-          );
-          return {
-            ...item,
-            isSaved: nextSaved
-          };
-        }
-        return item;
-      })
+    if (!getToken()) return;
+    const wasSaved = talents.find((t) => t.id === talentId)?.isSaved;
+    applyTalentPatch(talentId, (t) => ({ ...t, isSaved: !t.isSaved }));
+    addToast(
+      'info',
+      wasSaved ? 'Removed from Saved' : 'Saved to Collection',
+      wasSaved ? undefined : 'You can view this in your Profile.'
     );
-
-    if (selectedTalent && selectedTalent.id === talentId) {
-      setSelectedTalent((prev) => (prev ? { ...prev, isSaved: !prev.isSaved } : null));
-    }
+    api.toggleTalentInteraction(talentId, 'save')
+      .then(({ talent }) => applyTalentPatch(talentId, (t) => ({ ...t, ...talent })))
+      .catch(() => addToast('error', 'Could not update save'));
   };
 
   const handleShare = (talent: TalentItem) => {
@@ -225,57 +198,59 @@ export default function App() {
     addToast('success', 'Creator Boosted!', 'You cast an official vote for this creator.');
   };
 
-  // Comment Handlers
-  const handleAddComment = (talentId: string, text: string) => {
-    const newComment: Comment = {
-      id: `comment-${Date.now()}`,
-      talentId,
-      authorName: currentUser.name,
-      authorAvatar: currentUser.avatar,
-      text,
-      createdAt: 'Just now',
-      likes: 0,
-      isLiked: false
+  // Load comments from the server whenever a talent is opened.
+  useEffect(() => {
+    if (!selectedTalent) return;
+    let cancelled = false;
+    api
+      .getComments(selectedTalent.id)
+      .then((comments) => {
+        if (!cancelled) setCommentsMap((prev) => ({ ...prev, [selectedTalent.id]: comments }));
+      })
+      .catch(() => {
+        // fall back to any locally cached comments for this talent.
+      });
+    return () => {
+      cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTalent?.id]);
 
-    setCommentsMap((prev) => ({
-      ...prev,
-      [talentId]: [newComment, ...(prev[talentId] || [])]
-    }));
+  // Comment Handlers
+  const bumpTalentComments = (talentId: string) => {
+    setTalents((prev) => prev.map((t) => (t.id === talentId ? { ...t, commentsCount: t.commentsCount + 1 } : t)));
+    setSelectedTalent((prev) => (prev && prev.id === talentId ? { ...prev, commentsCount: prev.commentsCount + 1 } : prev));
+  };
 
-    setTalents((prev) =>
-      prev.map((t) =>
-        t.id === talentId ? { ...t, commentsCount: t.commentsCount + 1 } : t
-      )
-    );
-
-    if (selectedTalent && selectedTalent.id === talentId) {
-      setSelectedTalent((prev) =>
-        prev ? { ...prev, commentsCount: prev.commentsCount + 1 } : null
-      );
+  const handleAddComment = async (talentId: string, text: string) => {
+    if (!getToken()) {
+      addToast('error', 'Please log in to comment');
+      return;
     }
-
-    addToast('success', 'Comment Published');
+    bumpTalentComments(talentId);
+    try {
+      const comment = await api.addComment(talentId, text);
+      setCommentsMap((prev) => ({ ...prev, [talentId]: [...(prev[talentId] || []), comment] }));
+      addToast('success', 'Comment Published');
+    } catch {
+      addToast('error', 'Could not publish comment');
+    }
   };
 
   const handleToggleLikeComment = (commentId: string) => {
-    setCommentsMap((prev) => {
-      const updated: Record<string, Comment[]> = {};
-      Object.keys(prev).forEach((k) => {
-        updated[k] = prev[k].map((c) => {
-          if (c.id === commentId) {
-            const nextLiked = !c.isLiked;
-            return {
-              ...c,
-              isLiked: nextLiked,
-              likes: nextLiked ? c.likes + 1 : Math.max(0, c.likes - 1)
-            };
-          }
-          return c;
+    if (!getToken()) return;
+    api
+      .toggleCommentLike(commentId)
+      .then(({ comment }) => {
+        setCommentsMap((prev) => {
+          const updated: Record<string, Comment[]> = {};
+          Object.keys(prev).forEach((k) => {
+            updated[k] = prev[k].map((c) => (c.id === commentId ? { ...c, ...comment } : c));
+          });
+          return updated;
         });
-      });
-      return updated;
-    });
+      })
+      .catch(() => addToast('error', 'Could not update comment'));
   };
 
   // Upload Talent
@@ -301,13 +276,13 @@ export default function App() {
 
 
   const handleSendMessage = (threadId: string, text: string) => {
+    if (!getToken()) return;
     const userMsg = {
       id: `msg-${Date.now()}`,
       sender: 'user' as const,
       text,
       timestamp: 'Just now'
     };
-
     setChatThreads((prev) =>
       prev.map((t) => {
         if (t.id === threadId) {
@@ -322,42 +297,52 @@ export default function App() {
       })
     );
 
-    // Simulate smart contact response after 1.2s
-    setTimeout(() => {
-      const autoResponses = [
-        'Awesome! Keep up the brilliant work!',
-        'Loved that performance, voted for you today!',
-        'Let’s collaborate on a showcase soon 🔥',
-        'Thanks for reaching out brother! Have a wonderful day.'
-      ];
-      const randomReply = autoResponses[Math.floor(Math.random() * autoResponses.length)];
-
-      const contactMsg = {
-        id: `msg-reply-${Date.now()}`,
-        sender: 'contact' as const,
-        text: randomReply,
-        timestamp: 'Just now'
-      };
-
-      setChatThreads((prev) =>
-        prev.map((t) => {
-          if (t.id === threadId) {
+    api
+      .sendMessage(threadId, text)
+      .then(({ userMessage, lastMessage }) => {
+        setChatThreads((prev) =>
+          prev.map((t) => {
+            if (t.id !== threadId) return t;
+            const msgs = [...t.messages];
+            const lastIdx = msgs.length - 1;
+            if (lastIdx >= 0 && msgs[lastIdx].sender === 'user' && msgs[lastIdx].text === text) {
+              msgs[lastIdx] = userMessage;
+            }
             return {
               ...t,
-              lastMessage: randomReply,
+              lastMessage,
               timestamp: 'Just now',
-              messages: [...t.messages, contactMsg]
+              messages: msgs
             };
-          }
-          return t;
-        })
-      );
-    }, 1200);
+          })
+        );
+      })
+      .catch(() => addToast('error', 'Could not send message'));
+  };
+
+  const handleStartConversation = async (contactId: string): Promise<ChatThread | null> => {
+    try {
+      const thread = await api.createConversation(contactId);
+      setChatThreads((prev) => {
+        const idx = prev.findIndex((t) => t.id === thread.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = thread;
+          return next;
+        }
+        return [thread, ...prev];
+      });
+      return thread;
+    } catch {
+      addToast('error', 'Could not start conversation');
+      return null;
+    }
   };
 
   // Notifications
   const handleMarkAllNotificationsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    api.markAllNotificationsRead().catch(() => {});
     addToast('info', 'All Notifications Marked as Read');
   };
 
@@ -365,6 +350,7 @@ export default function App() {
     setNotifications((prev) =>
       prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
     );
+    api.markNotificationRead(notif.id).catch(() => {});
     if (notif.targetTalentId) {
       const found = talents.find((t) => t.id === notif.targetTalentId);
       if (found) {
@@ -379,6 +365,8 @@ export default function App() {
   const handleLogout = () => {
     api.logout();
     setIsLoggedIn(false);
+    setChatThreads([]);
+    setNotifications([]);
     setCurrentUser({
       ...currentUserProfile,
       name: 'Guest User',
@@ -420,10 +408,35 @@ export default function App() {
             } catch {
               // Social/guest path has no token — keep the local profile.
             }
+
+            // After login the initial mount effect has already run without a token,
+            // so fetch the user's inbox + notifications now.
+            try {
+              const [conversations, notifications] = await Promise.all([
+                api.getConversations(),
+                api.getNotifications(),
+              ]);
+              setChatThreads(conversations);
+              setNotifications(notifications);
+            } catch {
+              // keep mock inbox/notifications as fallback.
+            }
           }}
-          onNavigateHome={() => {
+          onNavigateHome={async () => {
             setIsLoggedIn(true);
             setActiveTab('home');
+            if (getToken()) {
+              try {
+                const [conversations, notifications] = await Promise.all([
+                  api.getConversations(),
+                  api.getNotifications(),
+                ]);
+                if (conversations.length > 0) setChatThreads(conversations);
+                if (notifications.length > 0) setNotifications(notifications);
+              } catch {
+                // keep mock inbox/notifications as fallback.
+              }
+            }
           }}
           initialMode="signup"
         />
@@ -495,6 +508,7 @@ export default function App() {
           <InboxView
             threads={chatThreads}
             onSendMessage={handleSendMessage}
+            onStartConversation={handleStartConversation}
           />
         )}
 
@@ -530,6 +544,11 @@ export default function App() {
               setIsLoggedIn(true);
               setActiveTab('home');
               addToast('success', `Welcome, ${name}!`);
+              if (getToken()) {
+                api.getConversations().then((conversations) => {
+                  setChatThreads(conversations);
+                }).catch(() => {});
+              }
             }}
             onNavigateHome={() => setActiveTab('home')}
           />
@@ -636,6 +655,11 @@ export default function App() {
           }));
           setIsLoggedIn(true);
           addToast('success', `Welcome back, ${name}!`);
+          if (getToken()) {
+            api.getConversations().then((conversations) => {
+              setChatThreads(conversations);
+            }).catch(() => {});
+          }
         }}
       />
 
@@ -646,6 +670,9 @@ export default function App() {
         currentUser={currentUser}
         onSaveProfile={(updated) => {
           setCurrentUser((prev) => ({ ...prev, ...updated }));
+          api.updateProfile(updated).then((user) => setCurrentUser(user)).catch(() => {
+            addToast('error', 'Profile update failed');
+          });
           addToast('success', 'Profile Updated Successfully');
         }}
       />

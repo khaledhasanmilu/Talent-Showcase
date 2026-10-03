@@ -99,3 +99,60 @@ export async function me(req, res) {
     return res.status(500).json({ error: 'Could not load profile' });
   }
 }
+
+// PUT /api/users/me — update the authenticated user's public profile
+export async function updateProfile(req, res) {
+  const { name, handle, location, bio, avatar } = req.body || {};
+
+  if (name !== undefined && !String(name).trim()) {
+    return res.status(400).json({ error: 'Name cannot be empty' });
+  }
+  if (handle !== undefined && !String(handle).trim()) {
+    return res.status(400).json({ error: 'Handle cannot be empty' });
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [req.userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = rows[0];
+
+    // Build the new handle, guarding against collision with another user.
+    let newHandle = handle !== undefined ? String(handle).trim() : user.handle;
+    const newName = name !== undefined ? String(name).trim() : user.name;
+
+    if (newHandle !== user.handle) {
+      if (!newHandle.startsWith('@')) newHandle = `@${newHandle}`;
+      const [dup] = await pool.query('SELECT id FROM users WHERE handle = ? AND id != ? LIMIT 1', [
+        newHandle,
+        req.userId,
+      ]);
+      if (dup.length > 0) {
+        return res.status(409).json({ error: 'That handle is already taken' });
+      }
+    }
+
+    await pool.query(
+      `UPDATE users SET
+         first_name = ?, last_name = '', name = ?,
+         handle = ?, location = ?, bio = ?, avatar = ?
+       WHERE id = ?`,
+      [
+        newName,
+        newName,
+        newHandle,
+        location !== undefined ? String(location || '') : user.location,
+        bio !== undefined ? String(bio || '') : user.bio,
+        avatar !== undefined ? String(avatar || '') : user.avatar,
+        req.userId,
+      ],
+    );
+
+    const [updated] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [req.userId]);
+    return res.json({ user: mapUserPublic(updated[0]) });
+  } catch (err) {
+    console.error('[update-profile]', err.message);
+    return res.status(500).json({ error: 'Could not update profile' });
+  }
+}

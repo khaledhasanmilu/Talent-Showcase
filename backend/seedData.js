@@ -150,6 +150,99 @@ export const seedUsers = [
   },
 ];
 
+// Real messaging seed: conversations between real seeded users.
+// Each pair produces two rows — one owned by each side — so every
+// account has a populated inbox and replies arrive from the opposite side.
+export const seedConversationPairs = [
+  {
+    a: 'lead-1', b: 'lead-2',
+    messages: [
+      ['user', 'Hey Subarna! Loved your last showcase 💖'],
+      ['contact', 'Thank you so much! Means a lot from you 🙌'],
+    ],
+  },
+  {
+    a: 'lead-1', b: 'lead-3',
+    messages: [
+      ['contact', 'Great performance on stage today!'],
+      ['user', 'Thanks Arfan! Let\u2019s collab soon.'],
+    ],
+  },
+  {
+    a: 'lead-1', b: 'lead-4',
+    messages: [
+      ['user', 'Sharing my new track with you 🎵'],
+      ['contact', 'Bro, listening right now. It\u2019s fire! 🎧'],
+    ],
+  },
+  {
+    a: 'lead-1', b: 'lead-5',
+    messages: [
+      ['contact', 'Voted for you this week 🚀'],
+      ['contact', 'Wishing you the best of luck!'],
+    ],
+  },
+  {
+    a: 'lead-2', b: 'lead-4',
+    messages: [
+      ['user', 'Are we rehearsing this weekend?'],
+      ['contact', 'Yes! Saturday, same studio.'],
+    ],
+  },
+  {
+    a: 'lead-3', b: 'lead-6',
+    messages: [
+      ['user', 'Loved your 3D art reel. 🔥'],
+      ['contact', 'Thanks bhai! Collab soon?'],
+    ],
+  },
+  {
+    a: 'lead-4', b: 'lead-7',
+    messages: [
+      ['contact', 'That poem gave me chills.'],
+      ['user', 'Means a lot, thank you!'],
+    ],
+  },
+  {
+    a: 'lead-5', b: 'lead-8',
+    messages: [
+      ['user', 'New instrumental is out.'],
+      ['contact', 'Loved it, tuning in again!'],
+    ],
+  },
+  {
+    a: 'lead-6', b: 'lead-7',
+    messages: [
+      ['contact', 'Great set at the showcase!'],
+      ['user', 'Appreciate it 🙌'],
+    ],
+  },
+  {
+    a: 'lead-7', b: 'lead-8',
+    messages: [
+      ['user', 'Read your new piece. Beautiful.'],
+      ['contact', 'Thank you so much!'],
+    ],
+  },
+];
+
+export const seedConversations = [];
+for (const pair of seedConversationPairs) {
+  const { a, b, messages } = pair;
+  seedConversations.push({
+    id: `conv-${a}-${b}`,
+    userId: a,
+    contactId: b,
+    messages: messages.map(([s, t]) => ({ sender: s, text: t })),
+  });
+  seedConversations.push({
+    id: `conv-${b}-${a}`,
+    userId: b,
+    contactId: a,
+    messages: messages.map(([s, t]) => ({ sender: s === 'user' ? 'contact' : 'user', text: t })),
+  });
+}
+
 export const seedTalents = [
   {
     id: 'talent-1',
@@ -433,4 +526,12 @@ export const seedTalents = [
     tags: ['Mural', 'GlobalArt', 'Painting'],
     audioWaveform: null,
   },
+];
+
+// Demo notifications for the current user (lead-1).
+export const seedNotifications = [
+  { id: 'notif-1', userId: 'lead-1', type: 'like', actorName: 'Subarna Khan', actorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80', message: 'liked your showcase', talentTitle: 'Soulful Vibes', talentId: 'talent-1' },
+  { id: 'notif-2', userId: 'lead-1', type: 'vote', actorName: 'Arfan Nisho', actorAvatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&auto=format&fit=crop&q=80', message: 'voted for your talent', talentTitle: 'Echoes of Rain', talentId: 'talent-2' },
+  { id: 'notif-3', userId: 'lead-1', type: 'follow', actorName: 'Khaled Hasan', actorAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&auto=format&fit=crop&q=80', message: 'started following you', talentId: null },
+  { id: 'notif-4', userId: 'lead-1', type: 'comment', actorName: 'Tasfia Rahman', actorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80', message: 'commented on your showcase', talentTitle: 'Soulful Vibes', talentId: 'talent-1' },
 ];

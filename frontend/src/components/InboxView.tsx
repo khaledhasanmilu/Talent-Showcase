@@ -7,22 +7,32 @@ import {
   Video as VideoIcon, 
   ArrowLeft,
   CheckCheck,
-  MessageSquare
+  MessageSquare,
+  Plus,
+  X,
+  Loader
 } from 'lucide-react';
-import { ChatThread } from '../types';
+import { ChatThread, UserProfile } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { api } from '../api/client';
 
 interface InboxViewProps {
   threads: ChatThread[];
   onSendMessage: (threadId: string, text: string) => void;
+  onStartConversation: (contactId: string) => Promise<ChatThread | null>;
 }
 
-export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage }) => {
+export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage, onStartConversation }) => {
   const { t, language } = useLanguage();
   const [activeThreadId, setActiveThreadId] = useState<string>(threads[0]?.id || '');
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
+  const [newMessageOpen, setNewMessageOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userResults, setUserResults] = useState<UserProfile[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [startingConv, setStartingConv] = useState(false);
 
   const activeThread = threads.find((tItem) => tItem.id === activeThreadId) || threads[0];
 
@@ -43,6 +53,38 @@ export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage }) 
     setInputText('');
   };
 
+  const openNewMessage = () => {
+    setNewMessageOpen(true);
+    setUserSearch('');
+    setUserResults([]);
+    setSearchingUsers(true);
+    api.getUsers()
+      .then((users) => setUserResults(users))
+      .catch(() => setUserResults([]))
+      .finally(() => setSearchingUsers(false));
+  };
+
+  const runUserSearch = (q: string) => {
+    setUserSearch(q);
+    setSearchingUsers(true);
+    api.getUsers(q.trim())
+      .then((users) => setUserResults(users))
+      .catch(() => setUserResults([]))
+      .finally(() => setSearchingUsers(false));
+  };
+
+  const pickUser = async (contactId: string) => {
+    if (startingConv) return;
+    setStartingConv(true);
+    const thread = await onStartConversation(contactId);
+    setStartingConv(false);
+    if (thread) {
+      setActiveThreadId(thread.id);
+      setNewMessageOpen(false);
+      setShowMobileChat(true);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <div className="bg-white rounded-3xl border border-slate-100 shadow-2xs overflow-hidden h-[80vh] flex flex-col md:flex-row">
@@ -57,9 +99,19 @@ export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage }) 
               <MessageSquare className="w-5 h-5 text-indigo-600" />
               {t.inboxTitle}
             </h1>
-            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-              {threads.reduce((acc, th) => acc + th.unreadCount, 0)} {t.newMessages}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openNewMessage}
+                className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-full transition-colors cursor-pointer"
+                aria-label={t.newMessage}
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">{t.newMessage}</span>
+              </button>
+              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+                {threads.reduce((acc, th) => acc + th.unreadCount, 0)} {t.newMessages}
+              </span>
+            </div>
           </div>
 
           {/* Search Box */}
@@ -243,6 +295,76 @@ export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage }) 
           </div>
         )}
       </div>
+
+      {/* New Message Modal */}
+      {newMessageOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-indigo-600" />
+                {t.newMessage}
+              </h3>
+              <button
+                onClick={() => setNewMessageOpen(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 border-b border-slate-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  value={userSearch}
+                  onChange={(e) => runUserSearch(e.target.value)}
+                  placeholder={t.searchPeople}
+                  className="w-full bg-slate-100 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+              {searchingUsers && (
+                <div className="flex items-center justify-center py-10 text-slate-400">
+                  <Loader className="w-5 h-5 animate-spin" />
+                </div>
+              )}
+              {!searchingUsers && userResults.length === 0 && (
+                <div className="py-10 text-center text-xs sm:text-sm text-slate-400 font-medium">
+                  {t.noUsersFound}
+                </div>
+              )}
+              {!searchingUsers &&
+                userResults.map((user) => (
+                  <button
+                    key={user.id}
+                    onClick={() => pickUser(user.id)}
+                    disabled={startingConv}
+                    className="w-full p-3 flex items-center gap-3 text-left hover:bg-indigo-50/60 transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-100"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">{user.name}</h4>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {user.handle} {user.location ? `• ${user.location}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full shrink-0">
+                      {t.startConversation}
+                    </span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -117,6 +117,10 @@ export interface Translations {
   typeMessage: string;
   selectConversation: string;
   today: string;
+  newMessage: string;
+  searchPeople: string;
+  startConversation: string;
+  noUsersFound: string;
 
   // Profile View
   editProfile: string;
@@ -317,6 +321,10 @@ export const translations: Record<Language, Translations> = {
     typeMessage: 'Type your message...',
     selectConversation: 'Select a conversation to start messaging',
     today: 'Today',
+    newMessage: 'New message',
+    searchPeople: 'Search people...',
+    startConversation: 'Start conversation',
+    noUsersFound: 'No users found',
 
     // Profile View
     editProfile: 'Edit profile',
@@ -515,6 +523,10 @@ export const translations: Record<Language, Translations> = {
     typeMessage: 'আপনার বার্তা লিখুন...',
     selectConversation: 'বার্তা আদান-প্রদান করতে একটি চ্যাট নির্বাচন করুন',
     today: 'আজ',
+    newMessage: 'নতুন বার্তা',
+    searchPeople: 'মানুষ খুঁজুন...',
+    startConversation: 'কথোপকথন শুরু করুন',
+    noUsersFound: 'কোনো ব্যবহারকারী পাওয়া যায়নি',
 
     // Profile View
     editProfile: 'প্রোফাইল সম্পাদনা',

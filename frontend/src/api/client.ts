@@ -1,4 +1,4 @@
-import type { LeaderboardUser, TalentItem, UserProfile } from '../types';
+import type { ChatThread, Comment, LeaderboardUser, NotificationItem, TalentItem, UserProfile } from '../types';
 
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || '';
@@ -127,6 +127,83 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  // ---- Interactions (like / vote / save) ----
+  async toggleTalentInteraction(talentId: string, action: 'like' | 'vote' | 'save'): Promise<{ talent: TalentItem; active: boolean }> {
+    return request<{ talent: TalentItem; active: boolean }>(`/api/talents/${talentId}/${action}`, {
+      method: 'POST',
+    });
+  },
+
+  // ---- Comments ----
+  async getComments(talentId: string): Promise<Comment[]> {
+    const data = await request<{ comments: Comment[] }>(`/api/talents/${talentId}/comments`);
+    return data.comments;
+  },
+
+  async addComment(talentId: string, text: string): Promise<Comment> {
+    const data = await request<{ comment: Comment }>(`/api/talents/${talentId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    return data.comment;
+  },
+
+  async toggleCommentLike(commentId: string): Promise<{ comment: Comment; active: boolean }> {
+    return request<{ comment: Comment; active: boolean }>(`/api/comments/${commentId}/like`, {
+      method: 'POST',
+    });
+  },
+
+  // ---- Profile ----
+  async updateProfile(payload: { name?: string; handle?: string; location?: string; bio?: string; avatar?: string }): Promise<UserProfile> {
+    const data = await request<{ user: UserProfile }>('/api/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    return data.user;
+  },
+
+  // ---- Messaging ----
+  async getUsers(search?: string): Promise<UserProfile[]> {
+    const suffix = search ? `?search=${encodeURIComponent(search)}` : '';
+    const data = await request<{ users: UserProfile[] }>(`/api/users${suffix}`);
+    return data.users;
+  },
+
+  async getConversations(): Promise<ChatThread[]> {
+    const data = await request<{ conversations: ChatThread[] }>('/api/conversations');
+    return data.conversations;
+  },
+
+  async createConversation(contactId: string): Promise<ChatThread> {
+    const data = await request<{ conversation: ChatThread }>('/api/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ contactId }),
+    });
+    return data.conversation;
+  },
+
+  async sendMessage(threadId: string, text: string): Promise<{ userMessage: ChatThread['messages'][number]; lastMessage: string }> {
+    return request<{ userMessage: ChatThread['messages'][number]; lastMessage: string }>(`/api/conversations/${threadId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  },
+
+  // ---- Notifications ----
+  async getNotifications(): Promise<NotificationItem[]> {
+    const data = await request<{ notifications: NotificationItem[] }>('/api/notifications');
+    return data.notifications;
+  },
+
+  async markAllNotificationsRead(): Promise<void> {
+    await request<{ ok: boolean }>('/api/notifications/read', { method: 'POST' });
+  },
+
+  async markNotificationRead(id: string): Promise<void> {
+    await request<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' });
   },
 
   logout() {
