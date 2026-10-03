@@ -41,6 +41,16 @@ Record errors promptly, including the attempt number and resolution. Change the 
 |-----------|-------|---------|------------|
 |           |       | 1       |            |
 
+## Session: 2026-10-04 — Like / Comment / Vote verification
+
+- **Status:** complete
+- Verified end-to-end (backend :5000 + MySQL running):
+  - Talent like toggle -> liked=true, likes 125400→125401
+  - Talent vote toggle -> voted=true, votes 125000→125001
+  - Comment publish -> comment "Great work!" created
+  - Comment like toggle -> likes 1 / isLiked true; off -> likes 0 / isLiked false
+- These features were already fully implemented across backend (talentController toggleLike/Vote/Save, commentController), routes, api/client.ts, and frontend (TalentCard, TalentDetailModal, FeedView, App.tsx handlers). No code changes required.
+
 ## 5-Question Reboot Check
 
 Use this table when resuming to confirm the current phase, destination, goal, findings, and completed work.
