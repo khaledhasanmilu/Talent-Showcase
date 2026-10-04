@@ -15,6 +15,10 @@ const POINTS_PER_LIKE = 2;
  * createdAt falls inside the window count toward the score.
  * Unparseable dates (e.g. "Just Now", "2h ago") are treated as recent
  * so they still appear in week/month boards instead of vanishing.
+ *
+ * `selfHandle` (optional) excludes the author's own like/vote on their own
+ * posts (net = feed counter minus 1 when isLiked/isVoted), matching the
+ * backend board which subtracts self-engagement while the feed still counts it.
  */
 export type LeaderboardRange = 'week' | 'month' | 'all';
 
@@ -31,6 +35,7 @@ export function buildLeaderboardFromTalents(
   talents: TalentItem[],
   range: LeaderboardRange = 'all',
   now: number = Date.now(),
+  selfHandle?: string,
 ): LeaderboardUser[] {
   const byAuthor = new Map<
     string,
@@ -61,8 +66,13 @@ export function buildLeaderboardFromTalents(
         comments: 0,
         talentCount: 0,
       };
-    prev.votes += t.votes || 0;
-    prev.likes += t.likes || 0;
+    // Feed counters include self-engagement, but the board must not:
+    // subtract the author's own like/vote (max 1 each, flagged by isLiked/isVoted).
+    const isOwn = !!selfHandle && (t.authorHandle === selfHandle || (!t.authorHandle && t.authorName === selfHandle));
+    const netVotes = Math.max(0, (t.votes || 0) - (isOwn && t.isVoted ? 1 : 0));
+    const netLikes = Math.max(0, (t.likes || 0) - (isOwn && t.isLiked ? 1 : 0));
+    prev.votes += netVotes;
+    prev.likes += netLikes;
     prev.comments += t.commentsCount || 0;
     prev.talentCount += 1;
     if (!prev.avatar && t.authorAvatar) prev.avatar = t.authorAvatar;

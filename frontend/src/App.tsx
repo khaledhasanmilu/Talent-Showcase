@@ -158,9 +158,11 @@ export default function App() {
         if (board.length > 0) setLeaderboard(board);
       })
       .catch(() => {
+        // Offline fallback: same net formula as the server (own like/vote excluded).
+        const selfHandle = currentUser?.handle;
         setLeaderboard((prev) => {
           const source = fallbackTalents ?? talents;
-          const rebuilt = buildLeaderboardFromTalents(source);
+          const rebuilt = buildLeaderboardFromTalents(source, 'all', Date.now(), selfHandle);
           return rebuilt.length > 0 ? rebuilt : prev;
         });
       });

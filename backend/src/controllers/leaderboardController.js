@@ -8,7 +8,10 @@ const POINTS_PER_LIKE = 2;
 // GET /api/leaderboard?limit=&range=week|month|all
 //
 // Ranks users by the real engagement their uploaded talents earned:
-//   score = votes*10 + comments*5 + likes*2
+//   score = net_votes*10 + net_comments*5 + net_likes*2
+// where net_* = feed counter minus the author's own like/vote/comments on
+// their own posts. So self-boosts still bump the feed card number (talents
+// table), but they contribute 0 here and can't move the board.
 // Talents are matched to their author by handle (falling back to name only
 // when no registered user owns that handle, so a post is never double-counted).
 // `range` limits which talents count toward the score by t.created_at:
@@ -20,23 +23,57 @@ export async function listLeaderboard(req, res) {
   const range = String(req.query.range || 'all').toLowerCase();
   const days = range === 'week' ? 7 : range === 'month' ? 30 : 0;
   const dateClause = days > 0 ? `AND t.created_at >= NOW() - INTERVAL ${days} DAY` : '';
+  const dateClauseT2 = days > 0 ? `AND t2.created_at >= NOW() - INTERVAL ${days} DAY` : '';
+  // Author-match shared by the feed join and the self-engagement subqueries.
+  const authorMatchT = `(t.author_handle = u.handle
+                OR (t.author_name = u.name
+                    AND NOT EXISTS (SELECT 1 FROM users u2 WHERE u2.handle = t.author_handle)))`;
+  const authorMatchT2 = `(t2.author_handle = u.handle
+                OR (t2.author_name = u.name
+                    AND NOT EXISTS (SELECT 1 FROM users u3 WHERE u3.handle = t2.author_handle)))`;
   try {
     const [rows] = await pool.query(
-      `SELECT u.id, u.name, u.handle, u.avatar, u.category, u.role,
-              COUNT(t.id) AS talent_count,
-              COALESCE(SUM(t.votes), 0) AS total_votes,
-              COALESCE(SUM(t.likes), 0) AS total_likes,
-              COALESCE(SUM(t.comments_count), 0) AS total_comments,
-              (COALESCE(SUM(t.votes), 0) * ? +
-               COALESCE(SUM(t.comments_count), 0) * ? +
-               COALESCE(SUM(t.likes), 0) * ?) AS score
-         FROM users u
-         LEFT JOIN talents t
-           ON (t.author_handle = u.handle
-               OR (t.author_name = u.name
-                   AND NOT EXISTS (SELECT 1 FROM users u2 WHERE u2.handle = t.author_handle)))
-              ${dateClause}
-        GROUP BY u.id, u.name, u.handle, u.avatar, u.category, u.role
+      `SELECT agg.id, agg.name, agg.handle, agg.avatar, agg.category, agg.role,
+              agg.talent_count,
+              GREATEST(0, agg.gross_votes - agg.self_votes) AS total_votes,
+              GREATEST(0, agg.gross_likes - agg.self_likes) AS total_likes,
+              GREATEST(0, agg.gross_comments - agg.self_comments) AS total_comments,
+              (GREATEST(0, agg.gross_votes - agg.self_votes) * ? +
+               GREATEST(0, agg.gross_comments - agg.self_comments) * ? +
+               GREATEST(0, agg.gross_likes - agg.self_likes) * ?) AS score
+         FROM (
+           SELECT u.id, u.name, u.handle, u.avatar, u.category, u.role,
+                  COUNT(t.id) AS talent_count,
+                  COALESCE(SUM(t.votes), 0) AS gross_votes,
+                  COALESCE(SUM(t.likes), 0) AS gross_likes,
+                  COALESCE(SUM(t.comments_count), 0) AS gross_comments,
+                  COALESCE((
+                    SELECT COUNT(*)
+                      FROM talents t2
+                      JOIN content_interactions ci
+                        ON ci.talent_id = t2.id AND ci.user_id = u.id AND ci.voted = 1
+                     WHERE ${authorMatchT2} ${dateClauseT2}
+                  ), 0) AS self_votes,
+                  COALESCE((
+                    SELECT COUNT(*)
+                      FROM talents t2
+                      JOIN content_interactions ci
+                        ON ci.talent_id = t2.id AND ci.user_id = u.id AND ci.liked = 1
+                     WHERE ${authorMatchT2} ${dateClauseT2}
+                  ), 0) AS self_likes,
+                  COALESCE((
+                    SELECT COUNT(*)
+                      FROM talents t2
+                      JOIN comments c
+                        ON c.talent_id = t2.id AND c.user_id = u.id
+                     WHERE ${authorMatchT2} ${dateClauseT2}
+                  ), 0) AS self_comments
+             FROM users u
+             LEFT JOIN talents t
+               ON ${authorMatchT}
+                  ${dateClause}
+            GROUP BY u.id, u.name, u.handle, u.avatar, u.category, u.role
+         ) AS agg
         ORDER BY score DESC, talent_count DESC
         LIMIT ${limit}`,
       [POINTS_PER_VOTE, POINTS_PER_COMMENT, POINTS_PER_LIKE],

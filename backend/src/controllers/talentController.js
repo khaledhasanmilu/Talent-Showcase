@@ -194,12 +194,10 @@ async function toggleInteraction(req, res, action) {
     const [actors] = await pool.query('SELECT handle, name FROM users WHERE id = ? LIMIT 1', [
       req.userId,
     ]);
-    const actor = actors[0];
-    // Anti-gaming: liking/voting your own post still toggles your state,
-    // but it does NOT move the counter (which feeds the leaderboard).
-    const isSelf =
-      actor &&
-      (actor.handle === talents[0].author_handle || actor.name === talents[0].author_name);
+    void actors;
+    // Feed counts include everyone (even the author's own like/vote) so the
+    // post card number always goes up. Leaderboard ranking separately
+    // subtracts self-engagement, so self-boosts don't move the board.
 
     const current = await getInteractions(req.userId, [id]);
     const prev = current.get(id)?.[col] ? 1 : 0;
@@ -212,7 +210,7 @@ async function toggleInteraction(req, res, action) {
       [req.userId, id, next],
     );
 
-    if (countCol && !isSelf) {
+    if (countCol) {
       const delta = next - prev;
       await pool.query(
         `UPDATE talents SET ${countCol} = GREATEST(0, ${countCol} + ?) WHERE id = ?`,

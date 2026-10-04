@@ -45,7 +45,6 @@ export async function createComment(req, res) {
     if (talents.length === 0) {
       return res.status(404).json({ error: 'Talent not found' });
     }
-    const talent = talents[0];
 
     const [users] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [req.userId]);
     if (users.length === 0) {
@@ -58,13 +57,10 @@ export async function createComment(req, res) {
       'INSERT INTO comments (id, talent_id, user_id, author_name, author_avatar, text) VALUES (?, ?, ?, ?, ?, ?)',
       [commentId, id, req.userId, author.name, author.avatar, String(text).trim()],
     );
-    // Anti-gaming: commenting on your own post still shows the comment,
-    // but it does NOT bump comments_count (which feeds the leaderboard).
-    const isSelf =
-      author.handle === talent.author_handle || author.name === talent.author_name;
-    if (!isSelf) {
-      await pool.query('UPDATE talents SET comments_count = comments_count + 1 WHERE id = ?', [id]);
-    }
+    // Feed count includes the author's own comments so the post card number
+    // always goes up. Leaderboard ranking separately subtracts
+    // self-comments, so self-boosts don't move the board.
+    await pool.query('UPDATE talents SET comments_count = comments_count + 1 WHERE id = ?', [id]);
 
     const [rows] = await pool.query('SELECT * FROM comments WHERE id = ? LIMIT 1', [commentId]);
     return res.status(201).json({ comment: mapComment(rows[0]) });
