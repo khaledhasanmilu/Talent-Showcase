@@ -12,6 +12,7 @@ import {
 import { TalentType, Category, TalentItem, UserProfile } from '../types';
 import { fireSuccessConfetti } from '../utils/confetti';
 import { captureVideoThumbnail } from '../utils/videoThumbnail';
+import { getMediaDuration } from '../utils/mediaDuration';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../api/client';
 
@@ -38,6 +39,7 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
   const [poemContent, setPoemContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [capturedThumb, setCapturedThumb] = useState<string | null>(null);
+  const [capturedDuration, setCapturedDuration] = useState<string | null>(null);
   const [isCapturingThumb, setIsCapturingThumb] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -62,12 +64,19 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
       // user's own content, not a stock placeholder. Never blocks upload.
       if (selectedType === 'video') {
         setCapturedThumb(null);
+        setCapturedDuration(null);
         setIsCapturingThumb(true);
         captureVideoThumbnail(file)
           .then((thumb) => setCapturedThumb(thumb))
           .finally(() => setIsCapturingThumb(false));
+      } else if (selectedType === 'audio') {
+        setCapturedThumb(null);
+        setCapturedDuration(null);
+        // Read the real duration instead of showing a hardcoded '3:30'.
+        getMediaDuration(file).then((d) => setCapturedDuration(d));
       } else {
         setCapturedThumb(null);
+        setCapturedDuration(null);
       }
     }
   };
@@ -107,6 +116,8 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
         createdLabel: language === 'bn' ? 'এইমাত্র' : 'Just now',
         thumbnail:
           selectedType === 'video' && capturedThumb ? capturedThumb : undefined,
+        audioDuration:
+          selectedType === 'audio' && capturedDuration ? capturedDuration : undefined,
       });
 
       onUploadSuccess(
@@ -119,7 +130,10 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
               ? capturedThumb
               : talent.thumbnail,
           contentUrl: localPreviewUrl || talent.contentUrl,
-          audioDuration: selectedType === 'audio' ? '3:30' : talent.audioDuration,
+          audioDuration:
+            selectedType === 'audio'
+              ? capturedDuration || talent.audioDuration
+              : talent.audioDuration,
           audioWaveform:
             selectedType === 'audio'
               ? [30, 50, 80, 95, 60, 40, 70, 90, 80, 60, 40, 75, 90, 65, 45, 30]
@@ -142,10 +156,10 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
         authorRank: 4,
         isVerified: true,
         createdAt: language === 'bn' ? 'এইমাত্র' : 'Just Now',
-        likes: 1,
-        views: 12,
+        likes: 0,
+        views: 0,
         commentsCount: 0,
-        votes: 1,
+        votes: 0,
         description: description.trim(),
         thumbnail:
           selectedType === 'video' && capturedThumb
@@ -161,10 +175,10 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
             ? 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4'
             : undefined),
         poemText: poemLines,
-        audioDuration: selectedType === 'audio' ? '3:30' : undefined,
+        audioDuration: selectedType === 'audio' ? capturedDuration || undefined : undefined,
         audioWaveform: selectedType === 'audio' ? [30, 50, 80, 95, 60, 40, 70, 90, 80, 60, 40, 75, 90, 65, 45, 30] : undefined,
-        isLiked: true,
-        isVoted: true,
+        isLiked: false,
+        isVoted: false,
         isSaved: false,
         tags: [category, 'CommunityShowcase']
       };
@@ -180,6 +194,7 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
     setPoemContent('');
     setSelectedFile(null);
     setCapturedThumb(null);
+    setCapturedDuration(null);
     setSelectedType('video');
     setCategory('Singing');
     onClose();
@@ -366,6 +381,13 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
                 </span>
               </label>
               {/* Auto-captured video frame preview */}
+              {selectedType === 'audio' && capturedDuration && (
+                <div className="mt-2.5 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {language === 'bn' ? `অডিওর দৈর্ঘ্য: ${capturedDuration}` : `Audio length: ${capturedDuration}`}
+                  </span>
+                </div>
+              )}
               {selectedType === 'video' && (isCapturingThumb || capturedThumb) && (
                 <div className="mt-2.5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-2.5">
                   {isCapturingThumb ? (

@@ -13,11 +13,11 @@ const PLACEHOLDER_THUMBNAILS = {
 // Fetch the requesting user's like/vote/save state for a set of talent ids.
 async function getInteractions(userId, talentIds) {
   if (!userId || talentIds.length === 0) return new Map();
-  const idList = `('${talentIds.join("','")}')`;
+  const placeholders = talentIds.map(() => '?').join(',');
   const [rows] = await pool.query(
     `SELECT talent_id, liked, voted, saved FROM content_interactions
-     WHERE user_id = ? AND talent_id IN ${idList}`,
-    [userId],
+     WHERE user_id = ? AND talent_id IN (${placeholders})`,
+    [userId, ...talentIds],
   );
   return new Map(rows.map((r) => [r.talent_id, { liked: r.liked, voted: r.voted, saved: r.saved }]));
 }
@@ -77,7 +77,7 @@ export async function listTalents(req, res) {
 
 // POST /api/talents (auth required — author is taken from the JWT)
 export async function createTalent(req, res) {
-  const { title, type, category, description, poemText, tags, createdLabel, thumbnail } = req.body || {};
+  const { title, type, category, description, poemText, tags, createdLabel, thumbnail, contentUrl, audioDuration } = req.body || {};
 
   if (!title || !String(title).trim()) {
     return res.status(400).json({ error: 'Title is required' });
@@ -113,13 +113,28 @@ export async function createTalent(req, res) {
         ? thumbnail.trim()
         : null;
 
+    // Accept a client-provided playable URL (http/https only, <= 2KB).
+    // Blob/data URLs die on reload or blow up the row, so they fall back
+    // to the sample video (video) or NULL (audio/text) as before.
+    const clientContentUrl =
+      typeof contentUrl === 'string' &&
+      contentUrl.length <= 2048 &&
+      /^https?:\/\/.+/i.test(contentUrl.trim())
+        ? contentUrl.trim()
+        : null;
+
+    const clientAudioDuration =
+      typeof audioDuration === 'string' && audioDuration.trim().length > 0 && audioDuration.trim().length <= 20
+        ? audioDuration.trim()
+        : null;
+
     await pool.query(
       `INSERT INTO talents
          (id, title, type, category, author_name, author_handle, author_avatar,
           author_location, author_rank, is_verified, created_label,
           likes, views, comments_count, votes, description, thumbnail, content_url,
           poem_text, audio_duration, tags, audio_waveform)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?, NULL, ?, NULL)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, NULL)`,
       [
         id,
         String(title).trim(),
@@ -134,8 +149,9 @@ export async function createTalent(req, res) {
         createdLabel || 'Just now',
         String(description).trim(),
         clientThumbnail || PLACEHOLDER_THUMBNAILS[safeType],
-        safeType === 'video' ? SAMPLE_VIDEO_URL : null,
+        clientContentUrl || (safeType === 'video' ? SAMPLE_VIDEO_URL : null),
         Array.isArray(poemText) ? JSON.stringify(poemText) : null,
+        clientAudioDuration,
         Array.isArray(tags) ? JSON.stringify(tags) : null,
       ],
     );

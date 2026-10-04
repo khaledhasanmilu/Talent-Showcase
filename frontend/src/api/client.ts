@@ -81,6 +81,10 @@ export interface CreateTalentPayload {
   createdLabel?: string;
   /** JPEG data URL of a frame captured from the uploaded video file. */
   thumbnail?: string;
+  /** Playable http(s) URL for the content (blob:/data: URLs are rejected server-side). */
+  contentUrl?: string;
+  /** Real playback duration of the uploaded audio file ("m:ss"). */
+  audioDuration?: string;
 }
 
 export const api = {
