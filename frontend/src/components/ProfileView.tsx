@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ArrowLeft,
   MapPin,
   Share2,
   Edit3,
@@ -27,6 +28,10 @@ interface ProfileViewProps {
   onOpenComments: (talent: TalentItem) => void;
   onShareTalent: (talent: TalentItem) => void;
   onOpenUpload?: () => void;
+  /** false when viewing another author's public profile (hides edit + Liked/Saved tabs). */
+  isOwn?: boolean;
+  /** Back navigation shown when viewing another author's profile. */
+  onBack?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -40,7 +45,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onToggleSave,
   onOpenComments,
   onShareTalent,
-  onOpenUpload
+  onOpenUpload,
+  isOwn = true,
+  onBack
 }) => {
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'Talent' | 'Liked' | 'Saved'>('Talent');
@@ -58,8 +65,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const tabs = [
     { key: 'Talent' as const, label: t.tabTalent, count: userTalents.length },
-    { key: 'Liked' as const, label: t.tabLiked, count: likedTalents.length },
-    { key: 'Saved' as const, label: t.tabSaved, count: savedTalents.length }
+    // Liked/Saved are the viewer's own collections — only on your own profile.
+    ...(isOwn
+      ? [
+          { key: 'Liked' as const, label: t.tabLiked, count: likedTalents.length },
+          { key: 'Saved' as const, label: t.tabSaved, count: savedTalents.length },
+        ]
+      : []),
   ];
 
   const stats = [
@@ -82,6 +94,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-6 py-6 sm:py-8 space-y-6">
+      {/* Back navigation — only when viewing another author's profile */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {language === 'bn' ? 'পেছনে' : 'Back'}
+        </button>
+      )}
       {/* Profile Hero — same theme as the homepage hero banner */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 text-white p-6 sm:p-8 shadow-lg shadow-indigo-600/15">
         {/* Ambient Lighting */}
@@ -133,14 +155,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
               <span className="hidden sm:inline w-px h-6 bg-white/20 mx-1" />
 
-              <button
-                id="edit-profile-btn"
-                onClick={onOpenEditProfile}
-                className="inline-flex items-center gap-1.5 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs px-4 py-2 rounded-full shadow-md shadow-black/10 active:scale-95 transition-all cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                {t.editProfile}
-              </button>
+              {isOwn && (
+                <button
+                  id="edit-profile-btn"
+                  onClick={onOpenEditProfile}
+                  className="inline-flex items-center gap-1.5 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs px-4 py-2 rounded-full shadow-md shadow-black/10 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  {t.editProfile}
+                </button>
+              )}
               <button
                 onClick={onShareProfile}
                 className="p-2 rounded-full bg-white/15 hover:bg-white/25 border border-white/10 text-white transition-colors cursor-pointer"
@@ -237,7 +261,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="text-center py-12 bg-white rounded-3xl border border-slate-200 p-8 shadow-2xs">
           <Grid className="w-8 h-8 text-slate-300 mx-auto mb-2" />
           <h3 className="text-xs sm:text-sm font-bold text-slate-700">{t.noItemsYet}</h3>
-          {activeTab === 'Talent' && onOpenUpload && (
+          {activeTab === 'Talent' && isOwn && onOpenUpload && (
             <button
               onClick={onOpenUpload}
               className="mt-4 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-600/25 active:scale-95 transition-all cursor-pointer"

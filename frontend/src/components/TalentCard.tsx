@@ -21,6 +21,7 @@ import { useLanguage } from '../context/LanguageContext';
 interface TalentCardProps {
   talent: TalentItem;
   onSelectTalent: (talent: TalentItem) => void;
+  onSelectAuthor: (talent: TalentItem) => void;
   onToggleLike: (id: string) => void;
   onToggleVote: (id: string) => void;
   onToggleSave: (id: string) => void;
@@ -31,6 +32,7 @@ interface TalentCardProps {
 export const TalentCard: React.FC<TalentCardProps> = ({
   talent,
   onSelectTalent,
+  onSelectAuthor,
   onToggleLike,
   onToggleVote,
   onToggleSave,
@@ -76,7 +78,7 @@ export const TalentCard: React.FC<TalentCardProps> = ({
       <div className="p-4 sm:p-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => onSelectTalent(talent)}
+            onClick={() => onSelectAuthor(talent)}
             className="relative group focus:outline-none shrink-0"
           >
             <img
@@ -94,7 +96,7 @@ export const TalentCard: React.FC<TalentCardProps> = ({
           <div>
             <div className="flex items-center gap-1.5">
               <button 
-                onClick={() => onSelectTalent(talent)}
+                onClick={() => onSelectAuthor(talent)}
                 className="font-bold text-sm sm:text-base text-slate-900 hover:text-indigo-600 transition-colors text-left"
               >
                 {talent.authorName}

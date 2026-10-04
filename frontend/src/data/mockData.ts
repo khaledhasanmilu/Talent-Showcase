@@ -468,6 +468,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 1200,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 14,
     isTop3: true
   },
@@ -481,6 +482,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 950,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 8,
     isTop3: true
   },
@@ -494,6 +496,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 870,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 11,
     isTop3: true
   },
@@ -507,6 +510,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 790,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 10
   },
   {
@@ -519,6 +523,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 710,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 6
   },
   {
@@ -531,6 +536,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 650,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 7
   },
   {
@@ -543,6 +549,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 540,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 9
   },
   {
@@ -555,6 +562,7 @@ export const mockLeaderboard: LeaderboardUser[] = [
     score: 430,
     likes: 0,
     votes: 0,
+    comments: 0,
     talentCount: 5
   }
 ];

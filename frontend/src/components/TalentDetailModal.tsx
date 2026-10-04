@@ -28,6 +28,7 @@ interface TalentDetailModalProps {
   onToggleVoteTalent: (talentId: string) => void;
   onToggleSaveTalent: (talentId: string) => void;
   onShare: (talent: TalentItem) => void;
+  onSelectAuthor: (talent: TalentItem) => void;
 }
 
 export const TalentDetailModal: React.FC<TalentDetailModalProps> = ({
@@ -39,7 +40,8 @@ export const TalentDetailModal: React.FC<TalentDetailModalProps> = ({
   onToggleLikeTalent,
   onToggleVoteTalent,
   onToggleSaveTalent,
-  onShare
+  onShare,
+  onSelectAuthor
 }) => {
   const { t, language } = useLanguage();
   const [commentInput, setCommentInput] = useState('');
@@ -166,10 +168,13 @@ export const TalentDetailModal: React.FC<TalentDetailModalProps> = ({
               {/* Creator Info */}
               <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-600 mt-1">
                 <span className="text-slate-400 font-medium">By</span>
-                <span className="font-bold text-slate-900 flex items-center gap-1">
+                <button
+                  onClick={() => onSelectAuthor(talent)}
+                  className="font-bold text-slate-900 hover:text-indigo-600 transition-colors flex items-center gap-1 cursor-pointer"
+                >
                   {talent.authorName}
                   {talent.isVerified && <CheckCircle2 className="w-4 h-4 text-indigo-600 fill-indigo-100" />}
-                </span>
+                </button>
                 <span className="text-slate-300">•</span>
                 <span className="flex items-center gap-1 text-xs text-slate-400">
                   <Clock className="w-3.5 h-3.5" />

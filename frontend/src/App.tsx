@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  mockTalents, 
-  mockLeaderboard, 
-  mockComments, 
-  mockNotifications, 
-  currentUserProfile 
+import {
+  mockTalents,
+  mockComments,
+  mockNotifications,
+  currentUserProfile
 } from './data/mockData';
 import { 
   TalentItem, 
@@ -37,6 +36,7 @@ import {
   User} from 'lucide-react';
 import { useLanguage } from './context/LanguageContext';
 import { api, getToken } from './api/client';
+import { buildLeaderboardFromTalents } from './utils/leaderboard';
 
 export default function App() {
   const { t } = useLanguage();
@@ -47,7 +47,9 @@ export default function App() {
 
   // Application Data State
   const [talents, setTalents] = useState<TalentItem[]>(mockTalents);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>(mockLeaderboard);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>(() =>
+    buildLeaderboardFromTalents(mockTalents)
+  );
   const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>(mockComments);
   const [notifications, setNotifications] = useState<NotificationItem[]>(mockNotifications);
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
@@ -56,6 +58,7 @@ export default function App() {
 
   // Modals State
   const [selectedTalent, setSelectedTalent] = useState<TalentItem | null>(null);
+  const [viewingAuthor, setViewingAuthor] = useState<UserProfile | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -100,9 +103,14 @@ export default function App() {
         ]);
         if (cancelled) return;
         if (serverTalents.length > 0) setTalents(serverTalents);
-        if (serverBoard.length > 0) setLeaderboard(serverBoard);
+        if (serverBoard.length > 0) {
+          setLeaderboard(serverBoard);
+        } else if (serverTalents.length > 0) {
+          // No board from server — rank from the posts themselves.
+          setLeaderboard(buildLeaderboardFromTalents(serverTalents));
+        }
       } catch {
-        // Backend offline — keep mock data so the UI still renders.
+        // Backend offline — keep local ranking built from mock posts.
       }
 
       if (getToken()) {
@@ -126,12 +134,35 @@ export default function App() {
     };
   }, []);
 
+  // Leaving the author profile when switching tabs.
+  useEffect(() => {
+    setViewingAuthor(null);
+  }, [activeTab]);
+
   // Handlers for Talent Interaction
   const applyTalentPatch = (talentId: string, patch: (t: TalentItem) => TalentItem) => {
     setTalents((prev) => prev.map((item) => (item.id === talentId ? patch(item) : item)));
     setSelectedTalent((prev) =>
       prev && prev.id === talentId ? { ...prev, ...patch(prev) } : prev
     );
+  };
+
+  // Leaderboard is always derived from talent posts — no separate vote.
+  // Prefer the server aggregation; fall back to a local build from the
+  // loaded feed (same formula) so offline ranking still reflects posts.
+  const refreshLeaderboard = (fallbackTalents?: TalentItem[]) => {
+    api
+      .getLeaderboard(8)
+      .then((board) => {
+        if (board.length > 0) setLeaderboard(board);
+      })
+      .catch(() => {
+        setLeaderboard((prev) => {
+          const source = fallbackTalents ?? talents;
+          const rebuilt = buildLeaderboardFromTalents(source);
+          return rebuilt.length > 0 ? rebuilt : prev;
+        });
+      });
   };
 
   const handleToggleLike = (talentId: string) => {
@@ -141,8 +172,17 @@ export default function App() {
       return { ...t, isLiked: next, likes: next ? t.likes + 1 : Math.max(0, t.likes - 1) };
     });
     api.toggleTalentInteraction(talentId, 'like')
-      .then(({ talent }) => applyTalentPatch(talentId, (t) => ({ ...t, ...talent })))
-      .catch(() => addToast('error', 'Could not update like'));
+      .then(({ talent }) => {
+        applyTalentPatch(talentId, (t) => ({ ...t, ...talent }));
+        refreshLeaderboard();
+      })
+      .catch(() => {
+        // Offline: re-rank from the optimistic local counts.
+        setTalents((prev) => {
+          refreshLeaderboard(prev);
+          return prev;
+        });
+      });
   };
 
   const handleToggleVote = (talentId: string) => {
@@ -157,8 +197,16 @@ export default function App() {
       addToast('success', 'Vote Recorded!', 'You boosted this talent in the weekly ranking (+5 points).');
     }
     api.toggleTalentInteraction(talentId, 'vote')
-      .then(({ talent }) => applyTalentPatch(talentId, (t) => ({ ...t, ...talent })))
-      .catch(() => addToast('error', 'Could not update vote'));
+      .then(({ talent }) => {
+        applyTalentPatch(talentId, (t) => ({ ...t, ...talent }));
+        refreshLeaderboard();
+      })
+      .catch(() => {
+        setTalents((prev) => {
+          refreshLeaderboard(prev);
+          return prev;
+        });
+      });
   };
 
   const handleToggleSave = (talentId: string) => {
@@ -182,20 +230,66 @@ export default function App() {
     addToast('success', 'Link Copied to Clipboard!', `Share "${talent.title}" with your friends.`);
   };
 
-  const handleVoteLeaderboardUser = (userId: string) => {
-    setLeaderboard((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          return {
-            ...u,
-            votes: u.votes + 1,
-            score: u.score + 10
-          };
-        }
-        return u;
-      })
+  // Clicking the author (avatar / name) opens their profile.
+  // Your own author chip goes to your profile tab; anyone else opens
+  // their public profile built from the loaded feed + leaderboard.
+  const handleSelectAuthor = (talent: TalentItem) => {
+    const isOwn =
+      talent.authorName === currentUser.name || talent.authorHandle === currentUser.handle;
+    setSelectedTalent(null);
+    if (isOwn) {
+      setViewingAuthor(null);
+      setActiveTab('profile');
+      return;
+    }
+    const boardEntry = leaderboard.find(
+      (u) => u.handle === talent.authorHandle || u.name === talent.authorName
     );
-    addToast('success', 'Creator Boosted!', 'You cast an official vote for this creator.');
+    const authorTalents = talents.filter(
+      (t) => t.authorHandle === talent.authorHandle || t.authorName === talent.authorName
+    );
+    setViewingAuthor({
+      id: boardEntry?.id || `author-${talent.authorHandle}`,
+      name: talent.authorName,
+      handle: talent.authorHandle,
+      avatar: talent.authorAvatar,
+      location: talent.authorLocation || '',
+      bio: '',
+      talentCount: authorTalents.length,
+      score: boardEntry?.score || 0,
+      rank: boardEntry?.rank || talent.authorRank || 0,
+      email: '',
+      category: boardEntry?.category,
+    });
+  };
+
+  // Clicking a leaderboard creator opens their public profile — with all
+  // their talent posts underneath, which is exactly what the rank is built from.
+  const handleSelectLeaderboardUser = (user: LeaderboardUser) => {
+    const isOwn = user.name === currentUser.name || user.handle === currentUser.handle;
+    setSelectedTalent(null);
+    if (isOwn) {
+      setViewingAuthor(null);
+      setActiveTab('profile');
+      return;
+    }
+    const authorTalents = talents.filter(
+      (t) => t.authorHandle === user.handle || t.authorName === user.name
+    );
+    const first = authorTalents[0];
+    setViewingAuthor({
+      id: user.id,
+      name: user.name,
+      handle: user.handle,
+      avatar: first?.authorAvatar || user.avatar,
+      location: first?.authorLocation || '',
+      bio: '',
+      talentCount: authorTalents.length,
+      score: user.score,
+      rank: user.rank,
+      email: '',
+      category: user.category,
+    });
   };
 
   // Load comments from the server whenever a talent is opened.
@@ -232,6 +326,7 @@ export default function App() {
       const comment = await api.addComment(talentId, text);
       setCommentsMap((prev) => ({ ...prev, [talentId]: [...(prev[talentId] || []), comment] }));
       addToast('success', 'Comment Published');
+      refreshLeaderboard();
     } catch {
       addToast('error', 'Could not publish comment');
     }
@@ -255,7 +350,11 @@ export default function App() {
 
   // Upload Talent
   const handleUploadSuccess = (newTalent: TalentItem, savedToServer = true, serverUser?: UserProfile) => {
-    setTalents((prev) => [newTalent, ...prev]);
+    setTalents((prev) => {
+      const next = [newTalent, ...prev];
+      refreshLeaderboard(next);
+      return next;
+    });
     if (serverUser) {
       // Counts (+1 talent, +50 score) already applied by the backend.
       setCurrentUser(serverUser);
@@ -467,11 +566,32 @@ export default function App() {
 
       {/* Main Views Container */}
       <main className="flex-1">
+        {viewingAuthor ? (
+          <ProfileView
+            currentUser={viewingAuthor}
+            talents={talents}
+            onSelectTalent={(t) => setSelectedTalent(t)}
+            onOpenEditProfile={() => {}}
+            onShareProfile={() => {
+              if (navigator.clipboard) navigator.clipboard.writeText(window.location.href);
+              addToast('success', 'Profile URL Copied!');
+            }}
+            onToggleLike={handleToggleLike}
+            onToggleVote={handleToggleVote}
+            onToggleSave={handleToggleSave}
+            onOpenComments={(t) => setSelectedTalent(t)}
+            onShareTalent={handleShare}
+            isOwn={false}
+            onBack={() => setViewingAuthor(null)}
+          />
+        ) : (
+        <>
         {activeTab === 'home' && (
           <FeedView
             talents={talents}
             leaderboard={leaderboard}
             onSelectTalent={(t) => setSelectedTalent(t)}
+            onSelectAuthor={handleSelectAuthor}
             onOpenUpload={() => setIsUploadOpen(true)}
             onSelectCategory={(cat) => setSelectedCategory(cat)}
             selectedCategory={selectedCategory}
@@ -488,6 +608,7 @@ export default function App() {
           <ExploreView
             talents={talents}
             onSelectTalent={(t) => setSelectedTalent(t)}
+            onSelectAuthor={handleSelectAuthor}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
           />
@@ -496,11 +617,8 @@ export default function App() {
         {activeTab === 'leaderboard' && (
           <LeaderboardView
             leaderboard={leaderboard}
-            onVoteUser={handleVoteLeaderboardUser}
-            onSelectCreator={(name) => {
-              setSearchQuery(name);
-              setActiveTab('explore');
-            }}
+            talents={talents}
+            onSelectUser={handleSelectLeaderboardUser}
           />
         )}
 
@@ -552,6 +670,8 @@ export default function App() {
             }}
             onNavigateHome={() => setActiveTab('home')}
           />
+        )}
+        </>
         )}
       </main>
 
@@ -621,6 +741,7 @@ export default function App() {
         onToggleVoteTalent={handleToggleVote}
         onToggleSaveTalent={handleToggleSave}
         onShare={handleShare}
+        onSelectAuthor={handleSelectAuthor}
       />
 
       {/* 2. Upload Talent Modal */}

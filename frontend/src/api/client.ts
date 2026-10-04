@@ -123,8 +123,8 @@ export const api = {
     return data.talents;
   },
 
-  async getLeaderboard(limit = 8): Promise<LeaderboardUser[]> {
-    const data = await request<{ leaderboard: LeaderboardUser[] }>(`/api/leaderboard?limit=${limit}`);
+  async getLeaderboard(limit = 8, range: 'week' | 'month' | 'all' = 'all'): Promise<LeaderboardUser[]> {
+    const data = await request<{ leaderboard: LeaderboardUser[] }>(`/api/leaderboard?limit=${limit}&range=${range}`);
     return data.leaderboard;
   },
 

@@ -120,6 +120,7 @@ export interface LeaderboardUser {
   score: number;
   likes: number;
   votes: number;
+  comments: number;
   talentCount: number;
   isTop3?: boolean;
 }

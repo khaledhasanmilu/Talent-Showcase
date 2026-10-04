@@ -19,6 +19,7 @@ interface FeedViewProps {
   talents: TalentItem[];
   leaderboard: LeaderboardUser[];
   onSelectTalent: (talent: TalentItem) => void;
+  onSelectAuthor: (talent: TalentItem) => void;
   onOpenUpload: () => void;
   onSelectCategory: (cat: Category | 'All') => void;
   selectedCategory: Category | 'All';
@@ -34,6 +35,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   talents,
   leaderboard,
   onSelectTalent,
+  onSelectAuthor,
   onOpenUpload,
   onSelectCategory,
   selectedCategory,
@@ -213,7 +215,15 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     {item.title}
                   </h4>
                   <div className="flex items-center justify-between text-xs text-slate-400 mt-1">
-                    <span className="truncate max-w-[90px]">{item.authorName}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectAuthor(item);
+                      }}
+                      className="truncate max-w-[90px] hover:text-indigo-600 transition-colors cursor-pointer"
+                    >
+                      {item.authorName}
+                    </button>
                     <span className="flex items-center gap-1 text-rose-500 font-bold">
                       <Heart className="w-3 h-3 fill-rose-500" />
                       {formatCompactNumber(item.likes)}
@@ -259,6 +269,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 key={talent.id}
                 talent={talent}
                 onSelectTalent={onSelectTalent}
+                onSelectAuthor={onSelectAuthor}
                 onToggleLike={onToggleLike}
                 onToggleVote={onToggleVote}
                 onToggleSave={onToggleSave}

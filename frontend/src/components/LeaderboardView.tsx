@@ -1,41 +1,108 @@
-import React, { useState } from 'react';
-import { 
-  Trophy, 
-  Crown, 
-  ThumbsUp, 
-  Heart, 
-  TrendingUp, 
-  Award, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Trophy,
+  Crown,
+  ThumbsUp,
+  Heart,
+  MessageCircle,
   Flame,
-  Star
 } from 'lucide-react';
-import { LeaderboardUser } from '../types';
-import { formatCompactNumber, fireVoteConfetti } from '../utils/confetti';
+import { LeaderboardUser, TalentItem } from '../types';
+import { formatCompactNumber } from '../utils/confetti';
 import { useLanguage } from '../context/LanguageContext';
+import { api } from '../api/client';
+import { buildLeaderboardFromTalents, LeaderboardRange } from '../utils/leaderboard';
 
 interface LeaderboardViewProps {
   leaderboard: LeaderboardUser[];
-  onVoteUser: (userId: string) => void;
-  onSelectCreator: (userName: string) => void;
+  talents?: TalentItem[];
+  onSelectCreator?: (userName: string) => void;
+  onSelectUser?: (user: LeaderboardUser) => void;
 }
+
+/** Compact engagement breakdown: votes (weighted most) • likes • comments. */
+const EngagementBreakdown: React.FC<{ user: LeaderboardUser; light?: boolean }> = ({ user, light }) => (
+  <div className={`flex items-center justify-center gap-2 text-[10px] sm:text-[11px] font-bold ${light ? 'text-amber-100/90' : 'text-slate-500'}`}>
+    <span className="flex items-center gap-0.5" title="Votes (×10 pts)">
+      <ThumbsUp className="w-3 h-3 text-indigo-500 fill-indigo-100" />
+      {formatCompactNumber(user.votes)}
+    </span>
+    <span className="flex items-center gap-0.5" title="Likes (×2 pts)">
+      <Heart className="w-3 h-3 text-rose-500 fill-rose-500" />
+      {formatCompactNumber(user.likes)}
+    </span>
+    <span className="flex items-center gap-0.5" title="Comments (×5 pts)">
+      <MessageCircle className="w-3 h-3 text-emerald-500" />
+      {formatCompactNumber(user.comments ?? 0)}
+    </span>
+  </div>
+);
 
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   leaderboard,
-  onVoteUser,
-  onSelectCreator
+  talents = [],
+  onSelectUser
 }) => {
   const { t, language } = useLanguage();
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'all'>('week');
+  const [timeRange, setTimeRange] = useState<LeaderboardRange>('week');
+  const [rangedBoard, setRangedBoard] = useState<LeaderboardUser[] | null>(null);
+  const [loadingRange, setLoadingRange] = useState(false);
 
-  const top1 = leaderboard.find((u) => u.rank === 1) || leaderboard[0];
-  const top2 = leaderboard.find((u) => u.rank === 2) || leaderboard[1];
-  const top3 = leaderboard.find((u) => u.rank === 3) || leaderboard[2];
-  const restList = leaderboard.filter((u) => u.rank > 3);
+  // Time tabs actually re-rank: ask the server for that window, and fall
+  // back to a local rebuild from the loaded feed when offline.
+  useEffect(() => {
+    if (timeRange === 'all') {
+      setRangedBoard(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingRange(true);
+    api
+      .getLeaderboard(8, timeRange)
+      .then((board) => {
+        if (!cancelled) {
+          setRangedBoard(board.length > 0 ? board : buildLeaderboardFromTalents(talents, timeRange));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRangedBoard(buildLeaderboardFromTalents(talents, timeRange));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRange(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange]);
 
-  const handleVote = (userId: string) => {
-    onVoteUser(userId);
-    fireVoteConfetti();
-  };
+  // Keep the ranged board in sync when new talents arrive while offline-filtered.
+  const visibleBoard = useMemo(() => {
+    if (timeRange === 'all' || rangedBoard === null) {
+      return timeRange === 'all' ? leaderboard : buildLeaderboardFromTalents(talents, timeRange);
+    }
+    return rangedBoard;
+  }, [leaderboard, rangedBoard, talents, timeRange]);
+
+  const top1 = visibleBoard.find((u) => u.rank === 1) || visibleBoard[0];
+  const top2 = visibleBoard.find((u) => u.rank === 2) || visibleBoard[1];
+  const top3 = visibleBoard.find((u) => u.rank === 3) || visibleBoard[2];
+  const restList = visibleBoard.filter((u) => u.rank > 3);
+
+  const tallyLabel =
+    timeRange === 'week'
+      ? language === 'bn'
+        ? 'লাইভ সাপ্তাহিক গণনা'
+        : 'Live Weekly Tally'
+      : timeRange === 'month'
+        ? language === 'bn'
+          ? 'লাইভ মাসিক গণনা'
+          : 'Live Monthly Tally'
+        : language === 'bn'
+          ? 'সর্বকালের গণনা'
+          : 'All-Time Tally';
+
+  const viewLabel = language === 'bn' ? 'প্রোফাইল দেখুন' : 'View Profile';
 
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
@@ -50,6 +117,12 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
           {t.leaderboardSubtitle}
+        </p>
+        {/* Scoring formula — rank comes from engagement on your own posts */}
+        <p className="text-[11px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full inline-block px-4 py-1.5">
+          {language === 'bn'
+            ? 'ভোট ×১০ + কমেন্ট ×৫ + লাইক ×২ = স্কোর'
+            : 'Votes ×10 + Comments ×5 + Likes ×2 = Score'}
         </p>
 
         {/* Timeframe Navigation Tabs */}
@@ -108,18 +181,22 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 </span>
               </div>
               <div className="text-center mt-1 sm:mt-2 w-full">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                  {top2.name}
-                </h4>
-                <div className="flex items-center justify-center gap-1 text-[11px] sm:text-xs text-rose-500 font-bold mt-0.5">
-                  <Heart className="w-3 h-3 fill-rose-500" />
-                  {formatCompactNumber(top2.votes)}
-                </div>
                 <button
-                  onClick={() => handleVote(top2.id)}
+                  onClick={() => onSelectUser?.(top2)}
+                  className="font-bold text-xs sm:text-sm text-slate-900 truncate hover:text-indigo-600 transition-colors cursor-pointer max-w-full"
+                >
+                  {top2.name}
+                </button>
+                <div className="flex items-center justify-center gap-1 text-[11px] sm:text-xs text-slate-700 font-extrabold mt-0.5">
+                  <Flame className="w-3 h-3 text-slate-400" />
+                  {formatCompactNumber(top2.score)} {t.pts}
+                </div>
+                <EngagementBreakdown user={top2} />
+                <button
+                  onClick={() => onSelectUser?.(top2)}
                   className="mt-2 text-[10px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 sm:px-3 py-1 rounded-full w-full transition-colors"
                 >
-                  {t.vote}
+                  {viewLabel}
                 </button>
               </div>
             </div>
@@ -144,18 +221,22 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 </span>
               </div>
               <div className="text-center mt-1 sm:mt-2 w-full">
-                <h4 className="font-extrabold text-xs sm:text-base text-slate-900 truncate">
+                <button
+                  onClick={() => onSelectUser?.(top1)}
+                  className="font-extrabold text-xs sm:text-base text-slate-900 truncate hover:text-indigo-600 transition-colors cursor-pointer max-w-full"
+                >
                   {top1.name}
-                </h4>
+                </button>
                 <div className="flex items-center justify-center gap-1 text-xs sm:text-sm text-amber-600 font-extrabold mt-0.5">
                   <Flame className="w-3.5 h-3.5 fill-amber-500" />
-                  {formatCompactNumber(top1.votes)}
+                  {formatCompactNumber(top1.score)} {t.pts}
                 </div>
+                <EngagementBreakdown user={top1} />
                 <button
-                  onClick={() => handleVote(top1.id)}
+                  onClick={() => onSelectUser?.(top1)}
                   className="mt-2 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 px-3 sm:px-4 py-1.5 rounded-full w-full shadow-xs shadow-indigo-600/30 active:scale-95 transition-all"
                 >
-                  {t.vote} Champion
+                  {viewLabel}
                 </button>
               </div>
             </div>
@@ -178,18 +259,22 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 </span>
               </div>
               <div className="text-center mt-1 sm:mt-2 w-full">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                  {top3.name}
-                </h4>
-                <div className="flex items-center justify-center gap-1 text-[11px] sm:text-xs text-rose-500 font-bold mt-0.5">
-                  <Heart className="w-3 h-3 fill-rose-500" />
-                  {formatCompactNumber(top3.votes)}
-                </div>
                 <button
-                  onClick={() => handleVote(top3.id)}
+                  onClick={() => onSelectUser?.(top3)}
+                  className="font-bold text-xs sm:text-sm text-slate-900 truncate hover:text-indigo-600 transition-colors cursor-pointer max-w-full"
+                >
+                  {top3.name}
+                </button>
+                <div className="flex items-center justify-center gap-1 text-[11px] sm:text-xs text-slate-700 font-extrabold mt-0.5">
+                  <Flame className="w-3 h-3 text-amber-600" />
+                  {formatCompactNumber(top3.score)} {t.pts}
+                </div>
+                <EngagementBreakdown user={top3} />
+                <button
+                  onClick={() => onSelectUser?.(top3)}
                   className="mt-2 text-[10px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 sm:px-3 py-1 rounded-full w-full transition-colors"
                 >
-                  {t.vote}
+                  {viewLabel}
                 </button>
               </div>
             </div>
@@ -204,7 +289,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             {language === 'bn' ? 'র‌্যাঙ্কিং তালিকা (#৪ - #৮)' : 'Rankings List (#4 - #8)'}
           </h3>
           <span className="text-xs font-bold text-slate-400">
-            {language === 'bn' ? 'লাইভ সাপ্তাহিক গণনা' : 'Live Weekly Tally'}
+            {loadingRange ? (language === 'bn' ? 'লোড হচ্ছে…' : 'Loading…') : tallyLabel}
           </span>
         </div>
 
@@ -226,26 +311,30 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 />
 
                 <div>
-                  <div className="font-bold text-xs sm:text-sm text-slate-900">
+                  <button
+                    onClick={() => onSelectUser?.(user)}
+                    className="font-bold text-xs sm:text-sm text-slate-900 hover:text-indigo-600 transition-colors cursor-pointer text-left"
+                  >
                     {user.name}
-                  </div>
+                  </button>
                   <div className="text-[11px] sm:text-xs text-slate-400">
                     {user.category} • {user.talentCount} {t.showcases}
                   </div>
+                  <EngagementBreakdown user={user} />
                 </div>
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
-                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-slate-700">
-                  <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-                  {formatCompactNumber(user.votes)}
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-indigo-600">
+                  <Flame className="w-3.5 h-3.5 fill-indigo-100" />
+                  {formatCompactNumber(user.score)} {t.pts}
                 </div>
 
                 <button
-                  onClick={() => handleVote(user.id)}
+                  onClick={() => onSelectUser?.(user)}
                   className="px-3.5 py-1.5 rounded-full text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white transition-colors"
                 >
-                  {t.vote}
+                  {viewLabel}
                 </button>
               </div>
             </div>

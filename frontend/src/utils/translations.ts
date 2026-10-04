@@ -289,7 +289,7 @@ export const translations: Record<Language, Translations> = {
 
     // Leaderboard View
     leaderboardTitle: 'Talent Leaderboard',
-    leaderboardSubtitle: 'Honoring top performers voted by the community this season',
+    leaderboardSubtitle: 'Ranked automatically by votes, likes & comments on each creator’s posts — vote on the posts to move them up',
     thisWeek: 'This Week',
     thisMonth: 'This Month',
     allTime: 'All Time',
@@ -491,7 +491,7 @@ export const translations: Record<Language, Translations> = {
 
     // Leaderboard View
     leaderboardTitle: 'সেরা শিল্পীদের লিডারবোর্ড',
-    leaderboardSubtitle: 'দর্শকদের ভোটে নির্বাচিত চলতি সপ্তাহের শীর্ষ গুণী শিল্পীবৃন্দ',
+    leaderboardSubtitle: 'প্রতিটি শিল্পীর পোস্টে পাওয়া ভোট, লাইক ও কমেন্ট থেকে স্বয়ংক্রিয় র‌্যাংকিং — পোস্টে ভোট দিলেই তারা উপরে উঠবে',
     thisWeek: 'এই সপ্তাহ',
     thisMonth: 'এই মাস',
     allTime: 'সর্বকালের সেরা',

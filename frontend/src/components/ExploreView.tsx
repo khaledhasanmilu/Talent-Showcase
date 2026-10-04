@@ -17,6 +17,7 @@ import { useLanguage } from '../context/LanguageContext';
 interface ExploreViewProps {
   talents: TalentItem[];
   onSelectTalent: (talent: TalentItem) => void;
+  onSelectAuthor: (talent: TalentItem) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
 }
@@ -24,6 +25,7 @@ interface ExploreViewProps {
 export const ExploreView: React.FC<ExploreViewProps> = ({
   talents,
   onSelectTalent,
+  onSelectAuthor,
   searchQuery,
   setSearchQuery
 }) => {
@@ -245,7 +247,15 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                 {item.title}
               </h3>
               <p className="text-xs text-slate-500 font-medium truncate flex items-center gap-1">
-                {item.authorName}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectAuthor(item);
+                  }}
+                  className="truncate hover:text-indigo-600 transition-colors cursor-pointer"
+                >
+                  {item.authorName}
+                </button>
                 {item.isVerified && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 inline shrink-0" />}
               </p>
               <div className="text-[11px] text-slate-400 flex items-center gap-1">
