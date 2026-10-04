@@ -183,10 +183,23 @@ async function toggleInteraction(req, res, action) {
   const countCol = { like: 'likes', vote: 'votes', save: null }[action];
 
   try {
-    const [talents] = await pool.query('SELECT id, likes, votes FROM talents WHERE id = ? LIMIT 1', [id]);
+    const [talents] = await pool.query(
+      'SELECT id, likes, votes, author_name, author_handle FROM talents WHERE id = ? LIMIT 1',
+      [id],
+    );
     if (talents.length === 0) {
       return res.status(404).json({ error: 'Talent not found' });
     }
+
+    const [actors] = await pool.query('SELECT handle, name FROM users WHERE id = ? LIMIT 1', [
+      req.userId,
+    ]);
+    const actor = actors[0];
+    // Anti-gaming: liking/voting your own post still toggles your state,
+    // but it does NOT move the counter (which feeds the leaderboard).
+    const isSelf =
+      actor &&
+      (actor.handle === talents[0].author_handle || actor.name === talents[0].author_name);
 
     const current = await getInteractions(req.userId, [id]);
     const prev = current.get(id)?.[col] ? 1 : 0;
@@ -199,7 +212,7 @@ async function toggleInteraction(req, res, action) {
       [req.userId, id, next],
     );
 
-    if (countCol) {
+    if (countCol && !isSelf) {
       const delta = next - prev;
       await pool.query(
         `UPDATE talents SET ${countCol} = GREATEST(0, ${countCol} + ?) WHERE id = ?`,

@@ -16,6 +16,26 @@ export function resolveMediaUrl(url: string | undefined): string | undefined {
   return `${base.replace(/\/$/, '')}${url.startsWith('/') ? url : `/${url}`}`;
 }
 
+/**
+ * Backend stores uploaded files as `/uploads/<file>` paths. Resolve every
+ * avatar/thumbnail/content URL in API responses once, here, so all views
+ * (navbar, cards, inbox, comments, leaderboard…) work without per-file edits.
+ * Idempotent — absolute http(s)/blob/data URLs pass through untouched.
+ */
+function resolveUserMedia<T extends { avatar?: string | null }>(u: T): T {
+  const avatar = resolveMediaUrl(u.avatar ?? undefined);
+  return avatar === undefined ? u : { ...u, avatar };
+}
+
+function resolveTalentMedia(t: TalentItem): TalentItem {
+  return {
+    ...t,
+    authorAvatar: resolveMediaUrl(t.authorAvatar) ?? t.authorAvatar,
+    thumbnail: resolveMediaUrl(t.thumbnail) ?? t.thumbnail,
+    contentUrl: resolveMediaUrl(t.contentUrl) ?? t.contentUrl,
+  };
+}
+
 const TOKEN_KEY = 'ts_token';
 
 export function getToken(): string | null {
@@ -109,6 +129,7 @@ export const api = {
       body: JSON.stringify(payload),
     });
     setToken(data.token);
+    data.user = resolveUserMedia(data.user);
     return data;
   },
 
@@ -118,12 +139,13 @@ export const api = {
       body: JSON.stringify({ email, password }),
     });
     setToken(data.token);
+    data.user = resolveUserMedia(data.user);
     return data;
   },
 
   async me(): Promise<UserProfile> {
     const data = await request<{ user: UserProfile }>('/api/auth/me');
-    return data.user;
+    return resolveUserMedia(data.user);
   },
 
   async getTalents(params?: { type?: string; category?: string; search?: string }): Promise<TalentItem[]> {
@@ -133,19 +155,22 @@ export const api = {
     if (params?.search) query.set('search', params.search);
     const suffix = query.toString() ? `?${query.toString()}` : '';
     const data = await request<{ talents: TalentItem[] }>(`/api/talents${suffix}`);
-    return data.talents;
+    return data.talents.map(resolveTalentMedia);
   },
 
   async getLeaderboard(limit = 8, range: 'week' | 'month' | 'all' = 'all'): Promise<LeaderboardUser[]> {
     const data = await request<{ leaderboard: LeaderboardUser[] }>(`/api/leaderboard?limit=${limit}&range=${range}`);
-    return data.leaderboard;
+    return data.leaderboard.map(resolveUserMedia);
   },
 
   async createTalent(payload: CreateTalentPayload): Promise<{ talent: TalentItem; user: UserProfile }> {
-    return request<{ talent: TalentItem; user: UserProfile }>('/api/talents', {
+    const data = await request<{ talent: TalentItem; user: UserProfile }>('/api/talents', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    data.talent = resolveTalentMedia(data.talent);
+    data.user = resolveUserMedia(data.user);
+    return data;
   },
 
   /** Upload a video/audio file; returns the persistent URL to send as contentUrl. */
@@ -171,15 +196,21 @@ export const api = {
 
   // ---- Interactions (like / vote / save) ----
   async toggleTalentInteraction(talentId: string, action: 'like' | 'vote' | 'save'): Promise<{ talent: TalentItem; active: boolean }> {
-    return request<{ talent: TalentItem; active: boolean }>(`/api/talents/${talentId}/${action}`, {
+    const data = await request<{ talent: TalentItem; active: boolean }>(`/api/talents/${talentId}/${action}`, {
       method: 'POST',
     });
+    data.talent = resolveTalentMedia(data.talent);
+    return data;
   },
 
   // ---- Comments ----
   async getComments(talentId: string): Promise<Comment[]> {
     const data = await request<{ comments: Comment[] }>(`/api/talents/${talentId}/comments`);
-    return data.comments;
+    return data.comments.map((c) => ({
+      ...c,
+      authorAvatar: resolveMediaUrl(c.authorAvatar) ?? c.authorAvatar,
+      replies: c.replies?.map((r) => ({ ...r, authorAvatar: resolveMediaUrl(r.authorAvatar) ?? r.authorAvatar })),
+    }));
   },
 
   async addComment(talentId: string, text: string): Promise<Comment> {
@@ -187,13 +218,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
+    data.comment.authorAvatar = resolveMediaUrl(data.comment.authorAvatar) ?? data.comment.authorAvatar;
     return data.comment;
   },
 
   async toggleCommentLike(commentId: string): Promise<{ comment: Comment; active: boolean }> {
-    return request<{ comment: Comment; active: boolean }>(`/api/comments/${commentId}/like`, {
+    const data = await request<{ comment: Comment; active: boolean }>(`/api/comments/${commentId}/like`, {
       method: 'POST',
     });
+    data.comment.authorAvatar = resolveMediaUrl(data.comment.authorAvatar) ?? data.comment.authorAvatar;
+    return data;
   },
 
   // ---- Profile ----
@@ -202,19 +236,22 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
-    return data.user;
+    return resolveUserMedia(data.user);
   },
 
   // ---- Messaging ----
   async getUsers(search?: string): Promise<UserProfile[]> {
     const suffix = search ? `?search=${encodeURIComponent(search)}` : '';
     const data = await request<{ users: UserProfile[] }>(`/api/users${suffix}`);
-    return data.users;
+    return data.users.map(resolveUserMedia);
   },
 
   async getConversations(): Promise<ChatThread[]> {
     const data = await request<{ conversations: ChatThread[] }>('/api/conversations');
-    return data.conversations;
+    return data.conversations.map((th) => ({
+      ...th,
+      contact: { ...th.contact, avatar: resolveMediaUrl(th.contact.avatar) ?? th.contact.avatar },
+    }));
   },
 
   async createConversation(contactId: string): Promise<ChatThread> {
@@ -222,6 +259,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ contactId }),
     });
+    data.conversation.contact.avatar =
+      resolveMediaUrl(data.conversation.contact.avatar) ?? data.conversation.contact.avatar;
     return data.conversation;
   },
 
@@ -235,7 +274,10 @@ export const api = {
   // ---- Notifications ----
   async getNotifications(): Promise<NotificationItem[]> {
     const data = await request<{ notifications: NotificationItem[] }>('/api/notifications');
-    return data.notifications;
+    return data.notifications.map((n) => ({
+      ...n,
+      user: { ...n.user, avatar: resolveMediaUrl(n.user.avatar) ?? n.user.avatar },
+    }));
   },
 
   async markAllNotificationsRead(): Promise<void> {

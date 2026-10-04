@@ -24,6 +24,11 @@ const ALLOWED_MIME = new Set([
   'audio/mp4',
   'audio/x-m4a',
   'audio/aac',
+  // image (profile pictures)
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
 ]);
 
 const storage = multer.diskStorage({

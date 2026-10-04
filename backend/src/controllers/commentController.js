@@ -38,10 +38,14 @@ export async function createComment(req, res) {
   }
 
   try {
-    const [talents] = await pool.query('SELECT id FROM talents WHERE id = ? LIMIT 1', [id]);
+    const [talents] = await pool.query(
+      'SELECT id, author_name, author_handle FROM talents WHERE id = ? LIMIT 1',
+      [id],
+    );
     if (talents.length === 0) {
       return res.status(404).json({ error: 'Talent not found' });
     }
+    const talent = talents[0];
 
     const [users] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [req.userId]);
     if (users.length === 0) {
@@ -54,7 +58,13 @@ export async function createComment(req, res) {
       'INSERT INTO comments (id, talent_id, user_id, author_name, author_avatar, text) VALUES (?, ?, ?, ?, ?, ?)',
       [commentId, id, req.userId, author.name, author.avatar, String(text).trim()],
     );
-    await pool.query('UPDATE talents SET comments_count = comments_count + 1 WHERE id = ?', [id]);
+    // Anti-gaming: commenting on your own post still shows the comment,
+    // but it does NOT bump comments_count (which feeds the leaderboard).
+    const isSelf =
+      author.handle === talent.author_handle || author.name === talent.author_name;
+    if (!isSelf) {
+      await pool.query('UPDATE talents SET comments_count = comments_count + 1 WHERE id = ?', [id]);
+    }
 
     const [rows] = await pool.query('SELECT * FROM comments WHERE id = ? LIMIT 1', [commentId]);
     return res.status(201).json({ comment: mapComment(rows[0]) });

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, Camera } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Camera, UploadCloud } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { api, resolveMediaUrl } from '../api/client';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -22,8 +23,53 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [location, setLocation] = useState(currentUser.location);
   const [bio, setBio] = useState(currentUser.bio);
   const [avatar, setAvatar] = useState(currentUser.avatar);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Refresh fields every time the modal opens (state persists while closed).
+  useEffect(() => {
+    if (isOpen) {
+      setName(currentUser.name);
+      setHandle(currentUser.handle);
+      setLocation(currentUser.location);
+      setBio(currentUser.bio);
+      setAvatar(currentUser.avatar);
+      setPreview(null);
+      setAvatarError('');
+    }
+  }, [isOpen, currentUser]);
 
   if (!isOpen) return null;
+
+  const presetAvatars = [
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80'
+  ];
+
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAvatarError('');
+    setPreview(URL.createObjectURL(file));
+    setUploading(true);
+    try {
+      const up = await api.uploadFile(file);
+      setAvatar(up.url);
+      setPreview(null);
+    } catch {
+      setPreview(null);
+      setAvatarError(
+        language === 'bn' ? 'ছবি আপলোড হয়নি, আবার চেষ্টা করুন' : 'Photo upload failed, try again'
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,31 +97,50 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           <div className="flex flex-col items-center justify-center space-y-2">
             <div className="relative">
               <img
-                src={avatar}
+                src={preview || resolveMediaUrl(avatar) || avatar}
                 alt="Avatar preview"
                 className="w-20 h-20 rounded-full object-cover ring-4 ring-indigo-50 shadow-md"
               />
               <button
                 type="button"
                 onClick={() => {
-                  const newUrls = [
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80'
-                  ];
-                  const currentIdx = newUrls.indexOf(avatar);
-                  const next = newUrls[(currentIdx + 1) % newUrls.length];
+                  const currentIdx = presetAvatars.indexOf(avatar);
+                  const next = presetAvatars[(currentIdx + 1) % presetAvatars.length];
                   setAvatar(next);
                 }}
                 className="absolute bottom-0 right-0 p-1.5 rounded-full bg-indigo-600 text-white shadow-xs hover:bg-indigo-700 cursor-pointer"
-                title="Change Avatar"
+                title={language === 'bn' ? 'রেডিমেড ছবি বদলান' : 'Cycle preset avatars'}
               >
                 <Camera className="w-3.5 h-3.5" />
               </button>
             </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleAvatarFile}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              {uploading
+                ? language === 'bn'
+                  ? 'আপলোড হচ্ছে…'
+                  : 'Uploading…'
+                : language === 'bn'
+                  ? 'নিজের ছবি আপলোড করুন'
+                  : 'Upload your own photo'}
+            </button>
+            {avatarError && (
+              <span className="text-[11px] font-semibold text-rose-600">{avatarError}</span>
+            )}
             <span className="text-[11px] text-slate-400">
-              {language === 'bn' ? 'ছবি পরিবর্তন করতে ক্যামেরা আইকন চাপুন' : 'Click camera to toggle avatar'}
+              {language === 'bn' ? 'ক্যামেরায় চাপলে রেডিমেড ছবি বদলাবে' : 'Camera cycles presets • Upload uses your photo'}
             </span>
           </div>
 
