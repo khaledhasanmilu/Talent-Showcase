@@ -166,6 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder={language === 'bn' ? 'নামের প্রথম অংশ' : 'First name'}
@@ -179,6 +180,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  autoComplete="family-name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder={language === 'bn' ? 'নামের শেষ অংশ' : 'Last name'}
@@ -195,6 +197,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type="text"
+                  autoComplete="email"
                   value={registerEmail}
                   onChange={(e) => setRegisterEmail(e.target.value)}
                   placeholder="name@example.com"
@@ -213,6 +216,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
                     value={registerPassword}
                     onChange={(e) => setRegisterPassword(e.target.value)}
                     placeholder="••••••••"
@@ -236,6 +240,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"

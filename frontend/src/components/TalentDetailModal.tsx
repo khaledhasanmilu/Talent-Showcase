@@ -16,6 +16,7 @@ import { TalentItem, Comment } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 import { AudioWaveformCard } from './AudioWaveformCard';
 import { formatCompactNumber, fireVoteConfetti } from '../utils/confetti';
+import { resolveMediaUrl } from '../api/client';
 import { useLanguage } from '../context/LanguageContext';
 
 interface TalentDetailModalProps {
@@ -114,7 +115,7 @@ export const TalentDetailModal: React.FC<TalentDetailModalProps> = ({
           {talent.type === 'video' && (
             <div className="relative aspect-video rounded-2xl overflow-hidden bg-black shadow-lg">
               <video
-                src={talent.contentUrl}
+                src={resolveMediaUrl(talent.contentUrl)}
                 poster={talent.thumbnail}
                 controls
                 autoPlay
@@ -130,6 +131,7 @@ export const TalentDetailModal: React.FC<TalentDetailModalProps> = ({
                 durationStr={talent.audioDuration || '4:47'}
                 bars={talent.audioWaveform}
                 variant="detail"
+                src={resolveMediaUrl(talent.contentUrl)}
               />
             </div>
           )}

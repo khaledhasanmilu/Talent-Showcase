@@ -3,6 +3,19 @@ import type { ChatThread, Comment, LeaderboardUser, NotificationItem, TalentItem
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || '';
 
+/**
+ * Turn a stored media path into a playable URL.
+ * Backend stores `/uploads/<file>`; in dev the Vite proxy only forwards
+ * `/api`, so relative upload paths must be resolved against the API origin.
+ * Absolute http(s) URLs (old sample/placeholder data) pass through untouched.
+ */
+export function resolveMediaUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url) || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  const base = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  return `${base.replace(/\/$/, '')}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
 const TOKEN_KEY = 'ts_token';
 
 export function getToken(): string | null {
@@ -133,6 +146,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  /** Upload a video/audio file; returns the persistent URL to send as contentUrl. */
+  async uploadFile(file: File): Promise<{ url: string; mimeType: string; size: number }> {
+    const token = getToken();
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/api/uploads`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string } & {
+      url: string;
+      mimeType: string;
+      size: number;
+    };
+    if (!res.ok) {
+      throw new ApiError(res.status, data?.error || `Upload failed (${res.status})`);
+    }
+    return data;
   },
 
   // ---- Interactions (like / vote / save) ----

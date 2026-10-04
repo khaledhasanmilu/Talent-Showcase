@@ -105,7 +105,14 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
       selectedFile && selectedType !== 'text' ? URL.createObjectURL(selectedFile) : undefined;
 
     try {
-      // Save to MySQL via the backend (author is taken from the JWT).
+      // 1. Upload the real file first so the post survives reload.
+      // (Blob URLs die on refresh; the server rejects them for contentUrl.)
+      let uploadedUrl: string | undefined;
+      if (selectedFile && selectedType !== 'text') {
+        const up = await api.uploadFile(selectedFile);
+        uploadedUrl = up.url;
+      }
+      // 2. Save to MySQL via the backend (author is taken from the JWT).
       const { talent, user } = await api.createTalent({
         title: title.trim(),
         type: selectedType,
@@ -116,6 +123,7 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
         createdLabel: language === 'bn' ? 'এইমাত্র' : 'Just now',
         thumbnail:
           selectedType === 'video' && capturedThumb ? capturedThumb : undefined,
+        contentUrl: uploadedUrl,
         audioDuration:
           selectedType === 'audio' && capturedDuration ? capturedDuration : undefined,
       });
@@ -129,7 +137,9 @@ export const UploadTalentModal: React.FC<UploadTalentModalProps> = ({
             selectedType === 'video' && capturedThumb
               ? capturedThumb
               : talent.thumbnail,
-          contentUrl: localPreviewUrl || talent.contentUrl,
+          // Server-persisted file URL first (reload-safe); local blob only
+          // as a fallback when the server returned nothing playable.
+          contentUrl: talent.contentUrl || localPreviewUrl,
           audioDuration:
             selectedType === 'audio'
               ? capturedDuration || talent.audioDuration

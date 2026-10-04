@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Play, Pause, Shuffle, Repeat, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { audioEngine } from '../utils/audioPlayer';
 
@@ -7,6 +7,8 @@ interface AudioWaveformCardProps {
   durationStr?: string;
   bars?: number[];
   variant?: 'feed' | 'detail';
+  /** Real audio file URL. When present the card plays it; otherwise the synth preview. */
+  src?: string;
 }
 
 const defaultBars = [
@@ -20,21 +22,41 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
   trackId,
   durationStr = '4:47',
   bars = defaultBars,
-  variant = 'feed'
+  variant = 'feed',
+  src
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
+  const [realDuration, setRealDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Pause real audio on unmount / track change.
   useEffect(() => {
+    const el = audioRef.current;
     return () => {
-      // pause if unmounting
+      el?.pause();
     };
-  }, []);
+  }, [trackId]);
+
+  // Keep mute flag in sync with the element.
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = isMuted;
+  }, [isMuted]);
 
   const togglePlay = () => {
+    const el = audioRef.current;
+    if (src && el) {
+      if (el.paused) {
+        void el.play().catch(() => setIsPlaying(false));
+      } else {
+        el.pause();
+      }
+      return;
+    }
+    // No uploaded file (old posts) — fall back to the synth preview.
     audioEngine.toggle(
       trackId,
       (sec) => setSeconds(sec),
@@ -43,14 +65,52 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
     setIsPlaying(!isPlaying);
   };
 
+  const seekBy = (delta: number) => {
+    const el = audioRef.current;
+    if (src && el && Number.isFinite(el.duration)) {
+      el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + delta));
+    } else {
+      setSeconds((s) => Math.max(0, s + delta));
+    }
+  };
+
+  const seekToFraction = (fraction: number) => {
+    const el = audioRef.current;
+    if (src && el && Number.isFinite(el.duration)) {
+      el.currentTime = fraction * el.duration;
+    } else {
+      setSeconds(Math.floor(fraction * 287));
+    }
+  };
+
   const formatTime = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const totalSecs = src && realDuration > 0 ? realDuration : 287;
+  const shownDuration =
+    src && realDuration > 0 ? formatTime(Math.floor(realDuration)) : durationStr;
+
   return (
     <div className={`w-full rounded-2xl bg-gradient-to-br from-indigo-50/70 via-purple-50/50 to-pink-50/40 border border-indigo-100/70 p-4 sm:p-6 ${variant === 'detail' ? 'shadow-sm' : ''}`}>
+      {src && (
+        <audio
+          ref={audioRef}
+          src={src}
+          preload="metadata"
+          loop={isRepeat}
+          onTimeUpdate={(e) => setSeconds(Math.floor(e.currentTarget.currentTime))}
+          onLoadedMetadata={(e) => setRealDuration(Math.floor(e.currentTarget.duration || 0))}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => {
+            setIsPlaying(false);
+            if (!isRepeat) setSeconds(0);
+          }}
+        />
+      )}
       {/* Top Waveform Display */}
       <div className="relative flex items-center justify-between gap-1 sm:gap-1.5 h-20 sm:h-24 px-2 sm:px-4 py-2 bg-white/80 backdrop-blur-xs rounded-xl border border-indigo-100/50 overflow-hidden">
         {/* Subtle background glow */}
@@ -68,7 +128,7 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
 
         {/* Dynamic Waveform Bars */}
         {bars.map((barHeight, idx) => {
-          const progressPercent = (seconds / 287) * 100;
+          const progressPercent = totalSecs > 0 ? (seconds / totalSecs) * 100 : 0;
           const barPercent = (idx / bars.length) * 100;
           const isPassed = barPercent <= progressPercent;
 
@@ -76,10 +136,7 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
             <div
               key={idx}
               className="flex-1 flex flex-col justify-center items-center h-full cursor-pointer group"
-              onClick={() => {
-                const targetSec = Math.floor((idx / bars.length) * 287);
-                setSeconds(targetSec);
-              }}
+              onClick={() => seekToFraction(idx / bars.length)}
             >
               <div
                 style={{
@@ -98,7 +155,7 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
 
         {/* Duration badge */}
         <div className="absolute bottom-1.5 right-2 text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-white/90 text-indigo-700 shadow-xs border border-indigo-100">
-          {isPlaying ? formatTime(seconds) : durationStr}
+          {isPlaying ? formatTime(seconds) : shownDuration}
         </div>
       </div>
 
@@ -116,7 +173,7 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
               <Shuffle className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setSeconds(Math.max(0, seconds - 15))}
+              onClick={() => seekBy(-15)}
               className="p-2 text-gray-500 hover:text-indigo-600 transition-colors"
               title="Previous 15s"
             >
@@ -132,13 +189,13 @@ export const AudioWaveformCard: React.FC<AudioWaveformCardProps> = ({
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
             <span className="text-xs font-bold text-gray-700">
-              {formatTime(seconds)} / {durationStr}
+              {formatTime(seconds)} / {shownDuration}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setSeconds(Math.min(287, seconds + 15))}
+              onClick={() => seekBy(15)}
               className="p-2 text-gray-500 hover:text-indigo-600 transition-colors"
               title="Next 15s"
             >

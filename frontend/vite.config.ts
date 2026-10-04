@@ -21,6 +21,13 @@ export default defineConfig(() => {
           target: process.env.VITE_API_URL || 'http://localhost:5000',
           changeOrigin: true,
         },
+        // Uploaded user media lives on the backend (express.static /uploads).
+        // Without this, stored /uploads/<file> URLs 404 on the dev server
+        // and uploaded videos show a black player.
+        '/uploads': {
+          target: process.env.VITE_API_URL || 'http://localhost:5000',
+          changeOrigin: true,
+        },
       },
     },
   };

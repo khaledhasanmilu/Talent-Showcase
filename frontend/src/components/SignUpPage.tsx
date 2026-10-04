@@ -68,9 +68,13 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
   const [role, setRole] = useState<'creator' | 'audience'>('creator');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  // NOTE: login and signup keep separate email/password states so typing in
+  // one mode never leaks into the other when switching tabs.
   const [email, setEmail] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
   const [primaryCategory, setPrimaryCategory] = useState<Category>('Singing');
   const [password, setPassword] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(presetAvatars[0]);
   const [agreeTerms, setAgreeTerms] = useState(true);
@@ -165,11 +169,11 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
       }
     } else {
       // Login Mode
-      if (!email.trim()) {
+      if (!loginEmail.trim()) {
         setError(language === 'bn' ? 'অনুগ্রহ করে ইমেইল প্রদান করুন' : 'Please enter your email or username');
         return;
       }
-      if (!password) {
+      if (!loginPassword) {
         setError(language === 'bn' ? 'অনুগ্রহ করে পাসওয়ার্ড প্রদান করুন' : 'Please enter your password');
         return;
       }
@@ -178,7 +182,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
       setError('');
 
       try {
-        const { user } = await api.login(email.trim(), password);
+        const { user } = await api.login(loginEmail.trim(), loginPassword);
         setIsLoading(false);
         fireSuccessConfetti();
         onSignUpSuccess(user.name, user.email, user.avatar || selectedAvatar, user.role || 'creator', 'login');
@@ -187,6 +191,15 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
         setError(toDisplayError(err));
       }
     }
+  };
+
+  // Switching modes wipes passwords + errors so nothing carries over.
+  const switchAuthMode = (next: 'signup' | 'login') => {
+    setAuthMode(next);
+    setError('');
+    setPassword('');
+    setConfirmPassword('');
+    setLoginPassword('');
   };
 
   const handleSocialAuth = (provider: string) => {
@@ -318,7 +331,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
               <button
                 type="button"
                 id="toggle-signup-tab"
-                onClick={() => { setAuthMode('signup'); setError(''); }}
+                onClick={() => switchAuthMode('signup')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                   authMode === 'signup'
                     ? 'bg-white text-indigo-600 shadow-xs'
@@ -330,7 +343,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
               <button
                 type="button"
                 id="toggle-login-tab"
-                onClick={() => { setAuthMode('login'); setError(''); }}
+                onClick={() => switchAuthMode('login')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                   authMode === 'login'
                     ? 'bg-white text-indigo-600 shadow-xs'
@@ -450,8 +463,9 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                   id="auth-email-input"
                   type="email"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete={authMode === 'signup' ? 'email' : 'username'}
+                  value={authMode === 'signup' ? email : loginEmail}
+                  onChange={(e) => (authMode === 'signup' ? setEmail(e.target.value) : setLoginEmail(e.target.value))}
                   placeholder="artist@showcase.com"
                   className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-900 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
                 />
@@ -496,8 +510,9 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                     id="auth-password-input"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                    value={authMode === 'signup' ? password : loginPassword}
+                    onChange={(e) => (authMode === 'signup' ? setPassword(e.target.value) : setLoginPassword(e.target.value))}
                     placeholder="Enter password"
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-900 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
                   />
@@ -535,6 +550,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                       id="signup-confirmpassword"
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Repeat password"
@@ -678,7 +694,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                 <button
                   type="button"
                   id="signup-switch-login-btn"
-                  onClick={() => { setAuthMode('login'); setError(''); }}
+                  onClick={() => switchAuthMode('login')}
                   className="font-bold text-indigo-600 hover:text-indigo-700 underline decoration-indigo-200 underline-offset-4 ml-1 cursor-pointer"
                 >
                   {t.loginNow}
@@ -690,7 +706,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                 <button
                   type="button"
                   id="login-switch-signup-btn"
-                  onClick={() => { setAuthMode('signup'); setError(''); }}
+                  onClick={() => switchAuthMode('signup')}
                   className="font-bold text-indigo-600 hover:text-indigo-700 underline decoration-indigo-200 underline-offset-4 ml-1 cursor-pointer"
                 >
                   {t.signUp}

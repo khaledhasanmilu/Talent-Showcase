@@ -7,6 +7,7 @@ import conversationRoutes from './routes/conversationRoutes.js';
 import leaderboardRoutes from './routes/leaderboardRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import talentRoutes from './routes/talentRoutes.js';
+import uploadRoutes, { UPLOAD_DIR } from './routes/uploadRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
 export function createApp() {
@@ -25,6 +26,10 @@ export function createApp() {
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/talents', talentRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
+  app.use('/api/uploads', uploadRoutes);
+
+  // Persisted user media (video/audio files stored by POST /api/uploads).
+  app.use('/uploads', express.static(UPLOAD_DIR));
   app.use('/api', userRoutes);
 
   app.use(notFound);

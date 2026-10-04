@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Search, 
   Send, 
@@ -20,9 +20,13 @@ interface InboxViewProps {
   threads: ChatThread[];
   onSendMessage: (threadId: string, text: string) => void;
   onStartConversation: (contactId: string) => Promise<ChatThread | null>;
+  /** Thread to auto-select (e.g. after tapping Message on a profile). */
+  focusThreadId?: string | null;
+  /** Called once the focused thread has been selected. */
+  onFocusConsumed?: () => void;
 }
 
-export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage, onStartConversation }) => {
+export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage, onStartConversation, focusThreadId, onFocusConsumed }) => {
   const { t, language } = useLanguage();
   const [activeThreadId, setActiveThreadId] = useState<string>(threads[0]?.id || '');
   const [showMobileChat, setShowMobileChat] = useState(false);
@@ -33,6 +37,15 @@ export const InboxView: React.FC<InboxViewProps> = ({ threads, onSendMessage, on
   const [userResults, setUserResults] = useState<UserProfile[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [startingConv, setStartingConv] = useState(false);
+
+  // Coming from someone's profile Message button — open that thread directly.
+  useEffect(() => {
+    if (focusThreadId && threads.some((tItem) => tItem.id === focusThreadId)) {
+      setActiveThreadId(focusThreadId);
+      setShowMobileChat(true);
+      onFocusConsumed?.();
+    }
+  }, [focusThreadId, threads, onFocusConsumed]);
 
   const activeThread = threads.find((tItem) => tItem.id === activeThreadId) || threads[0];
 

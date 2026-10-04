@@ -59,7 +59,8 @@ export default function App() {
   // Modals State
   const [selectedTalent, setSelectedTalent] = useState<TalentItem | null>(null);
   const [viewingAuthor, setViewingAuthor] = useState<UserProfile | null>(null);
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  // Thread to auto-open in the inbox (set when messaging someone from their profile).
+  const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'splash' | 'login' | 'register'>('login');
@@ -419,8 +420,7 @@ export default function App() {
       .catch(() => addToast('error', 'Could not send message'));
   };
 
-  const handleStartConversation = async (contactId: string): Promise<ChatThread | null> => {
-    try {
+  const handleStartConversation = async (contactId: string): Promise<ChatThread | null> => {    try {
       const thread = await api.createConversation(contactId);
       setChatThreads((prev) => {
         const idx = prev.findIndex((t) => t.id === thread.id);
@@ -435,6 +435,39 @@ export default function App() {
     } catch {
       addToast('error', 'Could not start conversation');
       return null;
+    }
+  };
+
+  // Message button on someone else's profile: resolve their real user id
+  // (profile ids built from post authors may be synthetic like `author-@x`),
+  // open (or fetch) the thread, then jump to the inbox with it selected.
+  const handleMessageAuthor = async (author: UserProfile) => {
+    if (!getToken()) {
+      addToast('error', 'Please log in to message');
+      return;
+    }
+    let contactId = author.id;
+    if (contactId.startsWith('author-') || contactId.startsWith('local-')) {
+      try {
+        const users = await api.getUsers(author.handle || author.name);
+        const match = users.find(
+          (u) => u.handle === author.handle || u.name === author.name
+        );
+        if (!match) {
+          addToast('error', 'This creator is not registered yet');
+          return;
+        }
+        contactId = match.id;
+      } catch {
+        addToast('error', 'Could not start conversation');
+        return;
+      }
+    }
+    const thread = await handleStartConversation(contactId);
+    if (thread) {
+      setPendingThreadId(thread.id);
+      setViewingAuthor(null);
+      setActiveTab('inbox');
     }
   };
 
@@ -583,6 +616,7 @@ export default function App() {
             onShareTalent={handleShare}
             isOwn={false}
             onBack={() => setViewingAuthor(null)}
+            onMessage={() => handleMessageAuthor(viewingAuthor)}
           />
         ) : (
         <>
@@ -627,6 +661,8 @@ export default function App() {
             threads={chatThreads}
             onSendMessage={handleSendMessage}
             onStartConversation={handleStartConversation}
+            focusThreadId={pendingThreadId}
+            onFocusConsumed={() => setPendingThreadId(null)}
           />
         )}
 

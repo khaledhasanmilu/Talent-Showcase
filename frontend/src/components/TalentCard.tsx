@@ -16,6 +16,7 @@ import { TalentItem } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 import { AudioWaveformCard } from './AudioWaveformCard';
 import { formatCompactNumber, fireVoteConfetti } from '../utils/confetti';
+import { resolveMediaUrl } from '../api/client';
 import { useLanguage } from '../context/LanguageContext';
 
 interface TalentCardProps {
@@ -195,6 +196,7 @@ export const TalentCard: React.FC<TalentCardProps> = ({
               durationStr={talent.audioDuration || '4:47'}
               bars={talent.audioWaveform}
               variant="feed"
+              src={resolveMediaUrl(talent.contentUrl)}
             />
           </div>
         )}

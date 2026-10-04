@@ -113,14 +113,16 @@ export async function createTalent(req, res) {
         ? thumbnail.trim()
         : null;
 
-    // Accept a client-provided playable URL (http/https only, <= 2KB).
-    // Blob/data URLs die on reload or blow up the row, so they fall back
-    // to the sample video (video) or NULL (audio/text) as before.
+    // Accept a client-provided playable URL: absolute http(s), or a path
+    // to a file stored via POST /api/uploads. Blob/data URLs die on reload
+    // or blow up the row, so they fall back to the sample video (video) or
+    // NULL (audio/text) as before.
+    const trimmedUrl = typeof contentUrl === 'string' ? contentUrl.trim() : '';
     const clientContentUrl =
-      typeof contentUrl === 'string' &&
-      contentUrl.length <= 2048 &&
-      /^https?:\/\/.+/i.test(contentUrl.trim())
-        ? contentUrl.trim()
+      trimmedUrl.length > 0 &&
+      trimmedUrl.length <= 2048 &&
+      (/^https?:\/\/.+/i.test(trimmedUrl) || /^\/uploads\/[\w.\-]+$/i.test(trimmedUrl))
+        ? trimmedUrl
         : null;
 
     const clientAudioDuration =

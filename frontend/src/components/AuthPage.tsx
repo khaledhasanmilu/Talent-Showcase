@@ -269,6 +269,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                   <input
                     type="text"
+                    autoComplete="username"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     placeholder="e.g. artist@showcase.com"
@@ -287,6 +288,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="Enter your password"
@@ -393,6 +395,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </label>
                   <input
                     type="text"
+                    autoComplete="given-name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="Khaled"
@@ -405,6 +408,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </label>
                   <input
                     type="text"
+                    autoComplete="family-name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Hasan"
@@ -424,6 +428,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                   <input
                     type="email"
+                    autoComplete="email"
                     value={registerEmail}
                     onChange={(e) => setRegisterEmail(e.target.value)}
                     placeholder="khaled@example.com"
@@ -440,6 +445,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={registerPassword}
                     onChange={(e) => setRegisterPassword(e.target.value)}
                     placeholder="••••••••"
@@ -452,6 +458,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"

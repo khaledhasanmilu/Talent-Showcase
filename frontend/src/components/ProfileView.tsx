@@ -10,7 +10,8 @@ import {
   Grid,
   Upload,
   LayoutGrid,
-  Zap
+  Zap,
+  MessageCircle
 } from 'lucide-react';
 import { UserProfile, TalentItem } from '../types';
 import { formatCompactNumber } from '../utils/confetti';
@@ -32,6 +33,8 @@ interface ProfileViewProps {
   isOwn?: boolean;
   /** Back navigation shown when viewing another author's profile. */
   onBack?: () => void;
+  /** Open a chat with this author (only on others' profiles). */
+  onMessage?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -47,7 +50,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onShareTalent,
   onOpenUpload,
   isOwn = true,
-  onBack
+  onBack,
+  onMessage
 }) => {
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'Talent' | 'Liked' | 'Saved'>('Talent');
@@ -163,6 +167,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   {t.editProfile}
+                </button>
+              )}
+              {!isOwn && onMessage && (
+                <button
+                  onClick={onMessage}
+                  className="inline-flex items-center gap-1.5 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs px-4 py-2 rounded-full shadow-md shadow-black/10 active:scale-95 transition-all cursor-pointer"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  {language === 'bn' ? 'মেসেজ' : 'Message'}
                 </button>
               )}
               <button
